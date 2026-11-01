@@ -19,6 +19,8 @@ import type { GenerationFormValues } from '@/lib/hooks/useGenerationForm';
 const ENGINE_OPTIONS = [
   { value: 'qwen:1.7B', label: 'Qwen3-TTS 1.7B', engine: 'qwen' },
   { value: 'qwen:0.6B', label: 'Qwen3-TTS 0.6B', engine: 'qwen' },
+  { value: 'qwen_cpp:1.7B', label: 'Qwen3-TTS 1.7B (GPU)', engine: 'qwen_cpp' },
+  { value: 'qwen_cpp:0.6B', label: 'Qwen3-TTS 0.6B (GPU)', engine: 'qwen_cpp' },
   { value: 'qwen_custom_voice:1.7B', label: 'Qwen CustomVoice 1.7B', engine: 'qwen_custom_voice' },
   { value: 'qwen_custom_voice:0.6B', label: 'Qwen CustomVoice 0.6B', engine: 'qwen_custom_voice' },
   { value: 'qwen_voice_design', label: 'Qwen VoiceDesign 1.7B', engine: 'qwen_voice_design' },
@@ -33,6 +35,7 @@ const ENGINE_OPTIONS = [
 
 const ENGINE_DESCRIPTIONS: Record<string, string> = {
   qwen: 'Multi-language, two sizes',
+  qwen_cpp: 'Qwen3-TTS on any GPU via Vulkan/Metal (qwentts.cpp)',
   qwen_custom_voice: '9 preset voices, instruct control',
   qwen_voice_design: 'Voices described in plain language',
   luxtts: 'Fast, English-focused',
@@ -49,6 +52,7 @@ const ENGLISH_ONLY_ENGINES = new Set(['luxtts', 'chatterbox_turbo']);
 /** Engines that support cloned (reference audio) profiles. */
 const CLONING_ENGINES = new Set([
   'qwen',
+  'qwen_cpp',
   'luxtts',
   'chatterbox',
   'chatterbox_turbo',
@@ -67,12 +71,22 @@ function getAvailableOptions(selectedProfile?: VoiceProfileResponse | null) {
 function getSelectValue(engine: string, modelSize?: string): string {
   if (engine === 'qwen') return `qwen:${modelSize || '1.7B'}`;
   if (engine === 'qwen_custom_voice') return `qwen_custom_voice:${modelSize || '1.7B'}`;
+  if (engine === 'qwen_cpp') return `qwen_cpp:${modelSize || '1.7B'}`;
   if (engine === 'tada') return `tada:${modelSize || '1B'}`;
   return engine;
 }
 
 export function applyEngineSelection(form: UseFormReturn<GenerationFormValues>, value: string) {
-  if (value.startsWith('qwen_custom_voice:')) {
+  if (value.startsWith('qwen_cpp:')) {
+    const [, modelSize] = value.split(':');
+    form.setValue('engine', 'qwen_cpp');
+    form.setValue('modelSize', modelSize as '1.7B' | '0.6B');
+    const currentLang = form.getValues('language');
+    const available = getLanguageOptionsForEngine('qwen_cpp');
+    if (!available.some((l) => l.value === currentLang)) {
+      form.setValue('language', available[0]?.value ?? 'en');
+    }
+  } else if (value.startsWith('qwen_custom_voice:')) {
     const [, modelSize] = value.split(':');
     form.setValue('engine', 'qwen_custom_voice');
     form.setValue('modelSize', modelSize as '1.7B' | '0.6B');

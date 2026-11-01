@@ -85,7 +85,7 @@ class GenerationRequest(BaseModel):
     seed: Optional[int] = Field(None, ge=0)
     model_size: Optional[str] = Field(default="1.7B", pattern="^(1\\.7B|0\\.6B|1B|3B)$")
     instruct: Optional[str] = Field(None, max_length=500)
-    engine: Optional[str] = Field(default=None, pattern="^(qwen|qwen_custom_voice|qwen_voice_design|luxtts|chatterbox|chatterbox_turbo|tada|kokoro|omnivoice)$")
+    engine: Optional[str] = Field(default=None, pattern="^(qwen|qwen_custom_voice|qwen_voice_design|luxtts|chatterbox|chatterbox_turbo|tada|kokoro|omnivoice|qwen_cpp)$")
     personality: bool = Field(
         default=False,
         description="When true and the profile has a personality prompt, the input text is rewritten in-character before TTS.",
@@ -342,6 +342,46 @@ class GenerationSettingsUpdate(BaseModel):
     autoplay_on_generate: Optional[bool] = None
 
 
+class TextPrepSettings(BaseModel):
+    """Spoken-form text preparation (numbers, currencies, pronunciation dictionary)."""
+
+    enabled: bool = True
+    dictionary: str = ""
+
+
+class TextPrepSettingsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    dictionary: Optional[str] = Field(default=None, max_length=200_000)
+
+
+class QwenCppSettings(BaseModel):
+    """Tuning for the qwen_cpp engine (qwentts.cpp). Stored in <data dir>/qwen_cpp.json."""
+
+    talker_precision: str = Field(default="Q8_0", pattern="^(Q8_0|BF16|F32|Q4_K_M)$")
+    codec_precision: str = Field(default="Q8_0", pattern="^(Q8_0|BF16|F32|Q4_K_M)$")
+    device: str = Field(default="auto", pattern="^(auto|CPU|Vulkan[0-9]|MTL0|CUDA[0-9])$")
+    temperature: float = Field(default=0.9, ge=0.0, le=2.0)
+    top_k: int = Field(default=50, ge=0, le=1000)
+    top_p: float = Field(default=1.0, gt=0.0, le=1.0)
+    repetition_penalty: float = Field(default=1.05, gt=0.0, le=3.0)
+    subtalker_temperature: float = Field(default=0.9, ge=0.0, le=2.0)
+    subtalker_top_k: int = Field(default=50, ge=0, le=1000)
+    server_found: bool = False
+    active_device: Optional[str] = None
+
+
+class QwenCppSettingsUpdate(BaseModel):
+    talker_precision: Optional[str] = Field(default=None, pattern="^(Q8_0|BF16|F32|Q4_K_M)$")
+    codec_precision: Optional[str] = Field(default=None, pattern="^(Q8_0|BF16|F32|Q4_K_M)$")
+    device: Optional[str] = Field(default=None, pattern="^(auto|CPU|Vulkan[0-9]|MTL0|CUDA[0-9])$")
+    temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
+    top_k: Optional[int] = Field(default=None, ge=0, le=1000)
+    top_p: Optional[float] = Field(default=None, gt=0.0, le=1.0)
+    repetition_penalty: Optional[float] = Field(default=None, gt=0.0, le=3.0)
+    subtalker_temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
+    subtalker_top_k: Optional[int] = Field(default=None, ge=0, le=1000)
+
+
 class MCPClientBindingResponse(BaseModel):
     """Per-MCP-client voice binding — what voice / engine the server should
     use when a given client_id calls voicebox_speak without args, plus an
@@ -352,7 +392,7 @@ class MCPClientBindingResponse(BaseModel):
     profile_id: Optional[str] = None
     default_engine: Optional[str] = Field(
         None,
-        pattern="^(qwen|qwen_custom_voice|qwen_voice_design|luxtts|chatterbox|chatterbox_turbo|tada|kokoro|omnivoice)$",
+        pattern="^(qwen|qwen_custom_voice|qwen_voice_design|luxtts|chatterbox|chatterbox_turbo|tada|kokoro|omnivoice|qwen_cpp)$",
     )
     default_personality: bool = False
     last_seen_at: Optional[datetime] = None
@@ -371,7 +411,7 @@ class MCPClientBindingUpsert(BaseModel):
     profile_id: Optional[str] = None
     default_engine: Optional[str] = Field(
         None,
-        pattern="^(qwen|qwen_custom_voice|qwen_voice_design|luxtts|chatterbox|chatterbox_turbo|tada|kokoro|omnivoice)$",
+        pattern="^(qwen|qwen_custom_voice|qwen_voice_design|luxtts|chatterbox|chatterbox_turbo|tada|kokoro|omnivoice|qwen_cpp)$",
     )
     default_personality: bool = False
 
@@ -390,7 +430,7 @@ class SpeakRequest(BaseModel):
     )
     engine: Optional[str] = Field(
         None,
-        pattern="^(qwen|qwen_custom_voice|qwen_voice_design|luxtts|chatterbox|chatterbox_turbo|tada|kokoro|omnivoice)$",
+        pattern="^(qwen|qwen_custom_voice|qwen_voice_design|luxtts|chatterbox|chatterbox_turbo|tada|kokoro|omnivoice|qwen_cpp)$",
     )
     personality: Optional[bool] = Field(
         None,

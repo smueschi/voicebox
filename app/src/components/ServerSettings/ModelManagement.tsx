@@ -71,6 +71,10 @@ const MODEL_DESCRIPTIONS: Record<string, string> = {
     'Kokoro 82M by hexgrad. Tiny 82M-parameter TTS that runs at CPU realtime. Supports 8 languages with pre-built voice styles. Apache 2.0 licensed.',
   omnivoice:
     'OmniVoice by k2-fsa. Zero-shot voice cloning via a diffusion language model, plus attribute-based voice design (gender, age, pitch, accent). The model covers 600+ languages; Voicebox exposes the 23 in its own language list. 24kHz output. NON-COMMERCIAL: the weights are CC-BY-NC (code is Apache 2.0; the bundled Higgs Audio V2 codec is under the Boson community licence), so do not use output commercially.',
+  'qwen-cpp-1.7B':
+    'Qwen3-TTS 1.7B Base through qwentts.cpp (GGML). Runs on the GPU via Vulkan on Windows/Linux (AMD, Intel, NVIDIA, incl. integrated Radeon) and Metal on macOS. Same voices and languages as Qwen TTS, GGUF weights.',
+  'qwen-cpp-0.6B':
+    'Qwen3-TTS 0.6B Base through qwentts.cpp (GGML). Faster, lighter variant for drafts. GPU via Vulkan/Metal.',
   'qwen-custom-voice-1.7B':
     'Qwen3-TTS CustomVoice 1.7B by Alibaba. 9 premium preset voices with instruct-based style control for tone, emotion, and prosody. Supports 10 languages.',
   'qwen-custom-voice-0.6B':
@@ -414,6 +418,7 @@ export function ModelManagement() {
     modelStatus?.models.filter(
       (m) =>
         m.model_name.startsWith('qwen-tts') ||
+        m.model_name.startsWith('qwen-cpp') ||
         m.model_name.startsWith('qwen-custom-voice') ||
         m.model_name.startsWith('qwen-voice-design') ||
         m.model_name.startsWith('luxtts') ||

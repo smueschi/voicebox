@@ -250,6 +250,10 @@ async def generate_chunked(
     -------
     (audio, sample_rate) : Tuple[np.ndarray, int]
     """
+    from .text_prep import prepare_text
+
+    text = prepare_text(text, language)
+
     async def generate_one(
         chunk_text: str,
         chunk_seed: int | None,

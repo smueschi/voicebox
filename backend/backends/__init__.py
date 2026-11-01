@@ -67,6 +67,10 @@ class ModelConfig:
     retries_runaway: bool = False
     supports_instruct: bool = False
     languages: list[str] = field(default_factory=lambda: ["en"])
+    # Exact files that make up the model inside ``hf_repo_id``. Set for repos
+    # that hold many variants (e.g. GGUF quantisations) where "any weight file
+    # present" would be wrong; the status check then looks for these files.
+    required_files: tuple[str, ...] = ()
 
 
 @runtime_checkable
@@ -239,6 +243,7 @@ TTS_ENGINES = {
     "tada": "TADA",
     "kokoro": "Kokoro",
     "omnivoice": "OmniVoice",
+    "qwen_cpp": "Qwen TTS (GPU, qwentts.cpp)",
 }
 
 LLM_ENGINES = {
@@ -283,6 +288,27 @@ def _get_qwen_model_configs() -> list[ModelConfig]:
             supports_instruct=False,
             languages=["zh", "en", "ja", "ko", "de", "fr", "ru", "pt", "es", "it"],
         ),
+    ]
+
+
+def _get_qwen_cpp_configs() -> list[ModelConfig]:
+    """Qwen3-TTS Base through qwentts.cpp (Vulkan/Metal). Files follow the precision setting."""
+    from .qwen_cpp_backend import QWENTTS_HF_REPO, model_files
+
+    languages = ["zh", "en", "ja", "ko", "de", "fr", "ru", "pt", "es", "it"]
+    return [
+        ModelConfig(
+            model_name=f"qwen-cpp-{size}",
+            display_name=f"Qwen TTS {size} (GPU, qwentts.cpp)",
+            engine="qwen_cpp",
+            hf_repo_id=QWENTTS_HF_REPO,
+            model_size=size,
+            size_mb=size_mb,
+            supports_instruct=False,
+            languages=languages,
+            required_files=model_files(size),
+        )
+        for size, size_mb in (("1.7B", 2400), ("0.6B", 1300))
     ]
 
 
@@ -569,6 +595,7 @@ def get_all_model_configs() -> list[ModelConfig]:
     """Return the full list of model configs (TTS + STT + LLM)."""
     return (
         _get_qwen_model_configs()
+        + _get_qwen_cpp_configs()
         + _get_qwen_custom_voice_configs()
         + _get_qwen_voice_design_configs()
         + _get_non_qwen_tts_configs()
@@ -581,6 +608,7 @@ def get_tts_model_configs() -> list[ModelConfig]:
     """Return only TTS model configs."""
     return (
         _get_qwen_model_configs()
+        + _get_qwen_cpp_configs()
         + _get_qwen_custom_voice_configs()
         + _get_qwen_voice_design_configs()
         + _get_non_qwen_tts_configs()
@@ -635,7 +663,7 @@ async def load_engine_model(engine: str, model_size: str = "default") -> None:
     backend = get_tts_backend_for_engine(engine)
     if engine in ("qwen", "qwen_custom_voice"):
         await backend.load_model_async(model_size)
-    elif engine == "tada":
+    elif engine in ("tada", "qwen_cpp"):
         await backend.load_model(model_size)
     else:
         await backend.load_model()
@@ -652,7 +680,7 @@ async def ensure_model_cached_or_raise(engine: str, model_size: str = "default")
             cfg = c
             break
 
-    if engine in ("qwen", "qwen_custom_voice", "tada"):
+    if engine in ("qwen", "qwen_custom_voice", "tada", "qwen_cpp"):
         if not backend._is_model_cached(model_size):
             raise HTTPException(
                 status_code=400,
@@ -700,7 +728,7 @@ def unload_model_by_config(config: ModelConfig) -> bool:
             return True
         return False
 
-    if config.engine == "qwen_custom_voice":
+    if config.engine in ("qwen_custom_voice", "qwen_cpp"):
         backend = get_tts_backend_for_engine(config.engine)
         loaded_size = getattr(backend, "_current_model_size", None) or getattr(backend, "model_size", None)
         if backend.is_loaded() and loaded_size == config.model_size:
@@ -738,7 +766,7 @@ def check_model_loaded(config: ModelConfig) -> bool:
             loaded_size = getattr(tts_model, "_current_model_size", None) or getattr(tts_model, "model_size", None)
             return tts_model.is_loaded() and loaded_size == config.model_size
 
-        if config.engine == "qwen_custom_voice":
+        if config.engine in ("qwen_custom_voice", "qwen_cpp"):
             backend = get_tts_backend_for_engine(config.engine)
             loaded_size = getattr(backend, "_current_model_size", None) or getattr(backend, "model_size", None)
             return backend.is_loaded() and loaded_size == config.model_size
@@ -760,7 +788,7 @@ def get_model_load_func(config: ModelConfig):
     if config.engine == "qwen":
         return lambda: tts.get_tts_model().load_model(config.model_size)
 
-    if config.engine == "qwen_custom_voice":
+    if config.engine in ("qwen_custom_voice", "qwen_cpp"):
         return lambda: get_tts_backend_for_engine(config.engine).load_model(config.model_size)
 
     if config.engine == "qwen_llm":
@@ -842,6 +870,10 @@ def get_tts_backend_for_engine(engine: str) -> TTSBackend:
             from .omnivoice_backend import OmniVoiceBackend
 
             backend = OmniVoiceBackend()
+        elif engine == "qwen_cpp":
+            from .qwen_cpp_backend import QwenCppTTSBackend
+
+            backend = QwenCppTTSBackend()
         elif engine == "qwen_custom_voice":
             from .qwen_custom_voice_backend import QwenCustomVoiceBackend
 

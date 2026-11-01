@@ -680,6 +680,13 @@ export function HistoryTable() {
                               {t('history.actions.exportAudioMp3')}
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                              onClick={() => handleDownloadAudio(gen.id, gen.text, 'srt')}
+                              disabled={exportGenerationAudio.isPending}
+                            >
+                              <Download className="mr-2 h-4 w-4" />
+                              {t('history.actions.exportSrt')}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                               onClick={() => handleExportPackage(gen.id, gen.text)}
                               disabled={exportGeneration.isPending}
                             >

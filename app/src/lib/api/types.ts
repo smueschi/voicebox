@@ -74,6 +74,7 @@ export interface GenerationRequest {
   engine?:
     | 'qwen'
     | 'qwen_custom_voice'
+    | 'qwen_cpp'
     | 'qwen_voice_design'
     | 'luxtts'
     | 'chatterbox'
@@ -421,7 +422,7 @@ export interface StoryResponse {
   item_count: number;
 }
 
-export type GenerationExportFormat = 'wav' | 'mp3';
+export type GenerationExportFormat = 'wav' | 'mp3' | 'srt';
 export type StoryExportFormat = 'wav' | 'mp3' | 'm4b';
 
 export interface StoryItemDetail {
@@ -586,4 +587,23 @@ export interface CloudStatus {
   key_prefix: string | null;
   connected_at: string | null;
   dashboard_url: string;
+}
+
+export interface TextPrepSettings {
+  enabled: boolean;
+  dictionary: string;
+}
+
+export interface QwenCppSettings {
+  talker_precision: 'Q8_0' | 'BF16' | 'F32' | 'Q4_K_M';
+  codec_precision: 'Q8_0' | 'BF16' | 'F32' | 'Q4_K_M';
+  device: string;
+  temperature: number;
+  top_k: number;
+  top_p: number;
+  repetition_penalty: number;
+  subtalker_temperature: number;
+  subtalker_top_k: number;
+  server_found: boolean;
+  active_device: string | null;
 }

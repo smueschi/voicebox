@@ -671,7 +671,8 @@
       "exportAudioMp3": "Export Audio (MP3)",
       "exportPackage": "Export Package",
       "applyEffects": "Apply Effects",
-      "regenerate": "Regenerate"
+      "regenerate": "Regenerate",
+      "exportSrt": "Export subtitles (SRT)"
     },
     "deleteDialog": {
       "title": "Delete Generation",
@@ -1222,6 +1223,57 @@
       "builtWith": "Built with",
       "buyCoffee": "Buy me a coffee",
       "license": "Licensed under <link>MIT</link>"
+    },
+    "textPrep": {
+      "title": "Text preparation",
+      "description": "Rewrites numbers, currencies and abbreviations into spoken words before synthesis (German and English), then applies your pronunciation dictionary.",
+      "enabled": {
+        "title": "Speak numbers and abbreviations correctly",
+        "description": "CHF 10'000 → zehntausend Franken, 0,2 % → null Komma zwei Prozent, z.B. → zum Beispiel."
+      },
+      "dictionary": {
+        "title": "Pronunciation dictionary",
+        "description": "One rule per line: written form => spoken form. Lines starting with # are comments.",
+        "save": "Save"
+      },
+      "preview": {
+        "title": "Preview",
+        "description": "How the model will read this text (German).",
+        "run": "Show"
+      }
+    },
+    "qwenCpp": {
+      "title": "Qwen GPU engine (qwentts.cpp)",
+      "description": "Settings for the \"Qwen3-TTS (GPU)\" engine, which runs Qwen3-TTS on any GPU via Vulkan (Windows/Linux) or Metal (macOS).",
+      "status": {
+        "title": "Device",
+        "missing": "tts-server not found — see the qwentts.cpp setup notes.",
+        "running": "Running on {{device}}",
+        "idle": "Not loaded yet — starts with the first generation."
+      },
+      "device": {
+        "auto": "Automatic",
+        "Vulkan0": "GPU (Vulkan)",
+        "MTL0": "GPU (Metal)",
+        "CPU": "CPU only"
+      },
+      "temperature": {
+        "title": "Expressiveness (temperature)",
+        "description": "Higher = more lively intonation, lower = calmer and more predictable. Qwen default: 0.90."
+      },
+      "talker": {
+        "title": "Speech model precision",
+        "description": "8-bit is fastest. BF16/F32 keeps finer nuances but needs more memory and time. Changing reloads the model."
+      },
+      "codec": {
+        "title": "Audio decoder precision",
+        "description": "Full precision (F32) can sound less metallic at little extra cost. Changing reloads the model."
+      },
+      "precision": {
+        "Q8_0": "8-bit (fast)",
+        "BF16": "BF16 (full)",
+        "F32": "F32 (full)"
+      }
     }
   },
   "models": {

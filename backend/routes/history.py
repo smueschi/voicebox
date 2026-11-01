@@ -170,6 +170,30 @@ async def export_generation(
 _EXPORT_MIME = {"wav": "audio/wav", "mp3": "audio/mpeg"}
 
 
+@router.get("/history/{generation_id}/export-srt")
+async def export_generation_srt(generation_id: str, db: Session = Depends(get_db)):
+    """Subtitles (SRT) for a generation: one cue per sentence, timed on the audio's pauses."""
+    from ..utils.audio import load_audio
+    from ..utils.subtitles import srt_for
+
+    generation = db.query(DBGeneration).filter_by(id=generation_id).first()
+    if not generation or not generation.audio_path:
+        raise HTTPException(status_code=404, detail="Generation not found")
+    audio_path = config.resolve_storage_path(generation.audio_path)
+    if audio_path is None or not audio_path.is_file():
+        raise HTTPException(status_code=404, detail="Audio file not found")
+
+    audio, sr = await asyncio.to_thread(load_audio, str(audio_path), 16000)
+    srt = srt_for(generation.text or "", audio, sr)
+    safe_text = "".join(c for c in (generation.text or "")[:30] if c.isalnum() or c in (" ", "-", "_")).strip()
+    filename = f"{safe_text or 'generation'}-{generation_id[:8]}.srt"
+    return Response(
+        content=srt.encode("utf-8"),
+        media_type="application/x-subrip",
+        headers={"Content-Disposition": safe_content_disposition("attachment", filename)},
+    )
+
+
 @router.get("/history/{generation_id}/export-audio")
 async def export_generation_audio(
     generation_id: str,

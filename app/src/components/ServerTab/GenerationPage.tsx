@@ -8,6 +8,7 @@ import { useGenerationSettings } from '@/lib/hooks/useSettings';
 import { usePlatform } from '@/platform/PlatformContext';
 import { useServerStore } from '@/stores/serverStore';
 import { SettingRow, SettingSection } from './SettingRow';
+import { QwenCppSection, TextPrepSection } from './VoiceTuningSections';
 
 export function GenerationPage() {
   const { t } = useTranslation();
@@ -145,6 +146,10 @@ export function GenerationPage() {
           }
         />
       </SettingSection>
+
+      <QwenCppSection />
+
+      <TextPrepSection />
       </div>
 
       <aside className="hidden lg:block w-[280px] shrink-0 space-y-6 sticky top-0">

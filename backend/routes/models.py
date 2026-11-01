@@ -316,6 +316,7 @@ async def get_model_status():
             "hf_repo_id": cfg.hf_repo_id,
             "aux_hf_repo_ids": cfg.aux_hf_repo_ids,
             "model_size": cfg.model_size,
+            "required_files": cfg.required_files,
             "check_loaded": lambda c=cfg: check_model_loaded(c),
         }
         for cfg in registry_configs
@@ -339,7 +340,19 @@ async def get_model_status():
             size_mb = None
             loaded = False
 
-            if cache_info:
+            if config["required_files"]:
+                # Multi-variant repo: only the listed files count.
+                downloaded = is_model_cached(config["hf_repo_id"], required_files=list(config["required_files"]))
+                if downloaded:
+                    try:
+                        snapshots = Path(hf_constants.HF_HUB_CACHE) / (
+                            "models--" + config["hf_repo_id"].replace("/", "--")) / "snapshots"
+                        size_mb = sum(
+                            next(snapshots.rglob(name)).resolve().stat().st_size for name in config["required_files"]
+                        ) / (1024 * 1024)
+                    except Exception:
+                        pass
+            elif cache_info:
                 repo_id = config["hf_repo_id"]
                 for repo in cache_info.repos:
                     if repo.repo_id == repo_id:

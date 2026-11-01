@@ -153,6 +153,7 @@ export function FloatingGenerateBox({
     | 'tada'
     | 'kokoro'
     | 'qwen_custom_voice'
+    | 'qwen_cpp'
     | 'qwen_voice_design'
     | 'omnivoice';
   useEffect(() => {

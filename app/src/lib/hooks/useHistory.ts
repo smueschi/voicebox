@@ -94,7 +94,7 @@ export function useExportGenerationAudio() {
 
       await platform.filesystem.saveFile(filename, blob, [
         {
-          name: 'Audio File',
+          name: format === 'srt' ? 'Subtitles' : 'Audio File',
           extensions: [format],
         },
       ]);

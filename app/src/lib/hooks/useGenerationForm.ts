@@ -22,6 +22,7 @@ const generationSchema = z.object({
   engine: z
     .enum([
       'qwen',
+      'qwen_cpp',
       'qwen_custom_voice',
       'qwen_voice_design',
       'luxtts',
@@ -109,7 +110,9 @@ export function useGenerationForm(options: UseGenerationFormOptions = {}) {
                       ? 'omnivoice'
                       : engine === 'qwen_custom_voice'
                         ? `qwen-custom-voice-${data.modelSize}`
-                        : `qwen-tts-${data.modelSize}`;
+                        : engine === 'qwen_cpp'
+                          ? `qwen-cpp-${data.modelSize}`
+                          : `qwen-tts-${data.modelSize}`;
       const displayName =
         engine === 'luxtts'
           ? 'LuxTTS'
@@ -131,9 +134,11 @@ export function useGenerationForm(options: UseGenerationFormOptions = {}) {
                         ? data.modelSize === '1.7B'
                           ? 'Qwen CustomVoice 1.7B'
                           : 'Qwen CustomVoice 0.6B'
-                        : data.modelSize === '1.7B'
-                          ? 'Qwen TTS 1.7B'
-                          : 'Qwen TTS 0.6B';
+                        : engine === 'qwen_cpp'
+                          ? `Qwen TTS ${data.modelSize} (GPU)`
+                          : data.modelSize === '1.7B'
+                            ? 'Qwen TTS 1.7B'
+                            : 'Qwen TTS 0.6B';
 
       // Check if model needs downloading
       try {
@@ -149,7 +154,7 @@ export function useGenerationForm(options: UseGenerationFormOptions = {}) {
       }
 
       const hasModelSizes =
-        engine === 'qwen' || engine === 'qwen_custom_voice' || engine === 'tada';
+        engine === 'qwen' || engine === 'qwen_cpp' || engine === 'qwen_custom_voice' || engine === 'tada';
       const supportsInstruct = engineSupportsInstruct(engine);
       const effectsChain = options.getEffectsChain?.();
       // This now returns immediately with status="generating"

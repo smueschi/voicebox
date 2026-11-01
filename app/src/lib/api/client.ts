@@ -55,6 +55,8 @@ import type {
   MCPClientBindingUpsert,
   CloudLoginStartResponse,
   CloudStatus,
+  QwenCppSettings,
+  TextPrepSettings,
 } from './types';
 
 function formatErrorDetail(detail: unknown, fallback: string): string {
@@ -346,7 +348,10 @@ class ApiClient {
     generationId: string,
     format: GenerationExportFormat = 'wav',
   ): Promise<Blob> {
-    const url = `${this.getBaseUrl()}/history/${generationId}/export-audio?format=${format}`;
+    const url =
+      format === 'srt'
+        ? `${this.getBaseUrl()}/history/${generationId}/export-srt`
+        : `${this.getBaseUrl()}/history/${generationId}/export-audio?format=${format}`;
     const response = await fetch(url);
 
     if (!response.ok) {
@@ -520,6 +525,37 @@ class ApiClient {
     patch: GenerationSettingsUpdate,
   ): Promise<GenerationSettings> {
     return this.request<GenerationSettings>('/settings/generation', {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    });
+  }
+
+  // Spoken-form text preparation (numbers, currencies, pronunciation dictionary).
+  async getTextPrepSettings(): Promise<TextPrepSettings> {
+    return this.request<TextPrepSettings>('/settings/text-prep');
+  }
+
+  async updateTextPrepSettings(patch: Partial<TextPrepSettings>): Promise<TextPrepSettings> {
+    return this.request<TextPrepSettings>('/settings/text-prep', {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    });
+  }
+
+  async previewTextPrep(text: string, language: string): Promise<{ spoken: string }> {
+    return this.request<{ spoken: string }>('/settings/text-prep/preview', {
+      method: 'POST',
+      body: JSON.stringify({ text, language }),
+    });
+  }
+
+  // qwen_cpp engine tuning (qwentts.cpp: precision, device, sampling).
+  async getQwenCppSettings(): Promise<QwenCppSettings> {
+    return this.request<QwenCppSettings>('/settings/qwen-cpp');
+  }
+
+  async updateQwenCppSettings(patch: Partial<QwenCppSettings>): Promise<QwenCppSettings> {
+    return this.request<QwenCppSettings>('/settings/qwen-cpp', {
       method: 'PUT',
       body: JSON.stringify(patch),
     });

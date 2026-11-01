@@ -273,6 +273,14 @@ def build_server(cuda=False, rocm=False):
             # OmniVoice — diffusion LM TTS, 600+ languages.
             "--hidden-import",
             "backend.backends.omnivoice_backend",
+            # Qwen3-TTS through qwentts.cpp (Vulkan/Metal) and spoken-form text prep.
+            # num2words imports its language modules dynamically.
+            "--hidden-import",
+            "backend.backends.qwen_cpp_backend",
+            "--hidden-import",
+            "backend.utils.text_prep",
+            "--collect-submodules",
+            "num2words",
             # The Higgs Audio V2 codec is vendored from transformers 5.x (we are
             # capped at 4.57.6). Both the shim and the vendored package are
             # imported from inside a function, so name them explicitly.

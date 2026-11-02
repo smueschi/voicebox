@@ -248,16 +248,6 @@ def encode_audio(audio: np.ndarray, sample_rate: int, response_format: str) -> t
     return result.stdout, media_type
 
 
-def apply_speed(audio: np.ndarray, sample_rate: int, speed: float) -> np.ndarray:
-    """Time-stretch without changing pitch. ``speed`` > 1 shortens the clip."""
-    if abs(speed - 1.0) < 1e-3 or audio.size == 0:
-        return audio
-    import librosa
-
-    stretched = librosa.effects.time_stretch(audio.astype(np.float32), rate=speed)
-    return stretched.astype(audio.dtype, copy=False)
-
-
 @router.get("/v1/models")
 async def list_models():
     """List every id ``POST /v1/audio/speech`` accepts as ``model``."""
@@ -396,10 +386,13 @@ async def _create_speech(request: Request, db: Session) -> Response:
         if effects_chain:
             audio = apply_effects(audio, sample_rate, effects_chain)
 
-    from ..utils.audio import normalize_audio
+    from ..utils.audio import apply_speed, normalize_audio
+    from ..utils.audio_finish import finish_audio
 
     audio = normalize_audio(audio)
     audio = apply_speed(audio, sample_rate, data.speed)
+    # The request carries its own speed; the speed setting does not apply here.
+    audio = finish_audio(audio, sample_rate, apply_speed_setting=False)
     content, media_type = encode_audio(audio, sample_rate, data.response_format)
 
     logger.info(

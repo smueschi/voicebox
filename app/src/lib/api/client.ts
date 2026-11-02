@@ -54,6 +54,7 @@ import type {
   MCPClientBindingListResponse,
   MCPClientBindingUpsert,
   CloudLoginStartResponse,
+  AudioFinishSettings,
   CloudStatus,
   QualityCheckSettings,
   QwenCppSettings,
@@ -557,6 +558,18 @@ class ApiClient {
 
   async updateQualityCheckSettings(patch: Partial<QualityCheckSettings>): Promise<QualityCheckSettings> {
     return this.request<QualityCheckSettings>('/settings/quality-check', {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    });
+  }
+
+  // Final processing for video use: loudness, de-esser, limiter, speed.
+  async getAudioFinishSettings(): Promise<AudioFinishSettings> {
+    return this.request<AudioFinishSettings>('/settings/audio-finish');
+  }
+
+  async updateAudioFinishSettings(patch: Partial<AudioFinishSettings>): Promise<AudioFinishSettings> {
+    return this.request<AudioFinishSettings>('/settings/audio-finish', {
       method: 'PUT',
       body: JSON.stringify(patch),
     });

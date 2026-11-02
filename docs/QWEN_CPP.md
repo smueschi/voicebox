@@ -56,6 +56,16 @@ sub-talker values can be edited there as well.
   CTranslate2's OpenMP runtime and PyTorch's cannot share a process on Windows.
   Applies to the generate / retry / regenerate pipeline, not to streaming or the
   OpenAI-compatible endpoint.
+- **Best of 2** (quality check option): every chunk is generated twice and the
+  take with fewer word errors is kept (ties keep the first). Doubles the time.
+- **Sound for video** (Settings → Generation, `<data dir>/audio_finish.json`), applied
+  to every output after normalization: speaking rate 0.85–1.15× (time-stretch,
+  pitch unchanged), a de-esser that lowers only the 5–10 kHz band while it carries
+  more than 35 % of the signal level, loudness to −14/−16/−20 LUFS (pyloudnorm)
+  and a look-ahead limiter at −1 dBFS. `normalize_audio` uses the same limiter
+  instead of hard clipping at 0.85, which used to flatten 6–139 samples per clip.
+- **Pause markers**: `[pause]` (0.6 s) or `[pause 1.5]` (seconds, max 5) in the text
+  insert silence; the text on each side is generated separately.
 - **Quiet reference recordings** are raised to −20 dBFS RMS (at most +30 dB, never
   above the 0.95 peak cap) instead of being rejected as "too quiet", after a
   60 Hz high-pass against rumble and mains hum. Only near-silent input (below

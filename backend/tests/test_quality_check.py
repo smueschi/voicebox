@@ -52,9 +52,10 @@ class _Backend:
 class _Check:
     """Pretends the n-th attempt has errors[n] word errors out of 20."""
 
-    def __init__(self, errors, max_attempts=3):
+    def __init__(self, errors, max_attempts=3, best_of=1):
         self.errors = list(errors)
         self.max_attempts = max_attempts
+        self.best_of = best_of
 
     async def check(self, audio, sample_rate, text):
         return qc.Verdict(errors=self.errors.pop(0), words=20, heard="", max_wer=0.1)
@@ -93,6 +94,35 @@ async def test_failed_check_keeps_the_audio():
     backend = _Backend()
     await generate_chunked(backend, "Kurzer Satz.", {}, language="de", seed=1, quality_check=Broken([]))
     assert backend.seeds == [1]
+
+
+@pytest.mark.asyncio
+async def test_best_of_two_generates_a_second_take_and_keeps_the_better():
+    backend = _Backend()
+    audio, _ = await generate_chunked(backend, "Kurzer Satz.", {}, language="de", seed=5,
+                                      quality_check=_Check([1, 0], best_of=2))
+    assert backend.seeds == [5, 5 + QUALITY_RETRY_SEED_STEP]
+    assert audio[0] == pytest.approx(0.2)
+
+
+@pytest.mark.asyncio
+async def test_best_of_two_keeps_the_first_take_on_a_tie():
+    backend = _Backend()
+    audio, _ = await generate_chunked(backend, "Kurzer Satz.", {}, language="de", seed=5,
+                                      quality_check=_Check([0, 0], best_of=2))
+    assert len(backend.seeds) == 2
+    assert audio[0] == pytest.approx(0.1)
+
+
+@pytest.mark.asyncio
+async def test_pause_markers_insert_silence_between_segments():
+    backend = _Backend()
+    audio, sr = await generate_chunked(backend, "Erster Satz. [pause 1,5] Zweiter Satz.", {},
+                                       language="de", seed=5, quality_check=_Check([0, 0]))
+    assert backend.seeds == [5, 1005]
+    assert len(audio) == 2 * SAMPLE_RATE + int(1.5 * SAMPLE_RATE)
+    gap = audio[SAMPLE_RATE : SAMPLE_RATE + int(1.5 * SAMPLE_RATE)]
+    assert np.all(gap == 0)
 
 
 def test_disabled_setting_returns_no_check(monkeypatch):

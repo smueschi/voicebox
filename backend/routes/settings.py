@@ -87,6 +87,21 @@ async def update_quality_check_settings(patch: models.QualityCheckSettingsUpdate
     return await get_quality_check_settings()
 
 
+@router.get("/audio-finish", response_model=models.AudioFinishSettings)
+async def get_audio_finish_settings():
+    from ..utils import audio_finish
+
+    return models.AudioFinishSettings(**audio_finish.load_settings())
+
+
+@router.put("/audio-finish", response_model=models.AudioFinishSettings)
+async def update_audio_finish_settings(patch: models.AudioFinishSettingsUpdate):
+    from ..utils import audio_finish
+
+    audio_finish.save_settings(patch.model_dump(exclude_unset=True))
+    return await get_audio_finish_settings()
+
+
 @router.get("/qwen-cpp", response_model=models.QwenCppSettings)
 async def get_qwen_cpp_settings():
     from ..backends import get_tts_backend_for_engine

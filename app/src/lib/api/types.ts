@@ -598,7 +598,16 @@ export interface QualityCheckSettings {
   enabled: boolean;
   max_wer: number;
   max_attempts: number;
+  best_of: number;
   available: boolean;
+}
+
+export interface AudioFinishSettings {
+  /** Integrated loudness target; 0 keeps the level from normalization. */
+  loudness_lufs: number;
+  deesser: boolean;
+  deesser_strength: number;
+  speed: number;
 }
 
 export interface QwenCppSettings {

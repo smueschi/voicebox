@@ -5,6 +5,7 @@ Audio processing utilities.
 import numpy as np
 import soundfile as sf
 import librosa
+from scipy.ndimage import maximum_filter1d, minimum_filter1d, uniform_filter1d
 from scipy.signal import butter, sosfiltfilt
 from typing import Tuple, Optional
 
@@ -48,10 +49,38 @@ def normalize_audio(
         gain = target_rms / rms
         audio = audio * gain
     
-    # Peak limiting
-    audio = np.clip(audio, -peak_limit, peak_limit)
-    
-    return audio
+    return soft_limit(audio, peak_limit)
+
+
+def soft_limit(audio: np.ndarray, ceiling: float = 0.85, window: int = 241) -> np.ndarray:
+    """
+    Look-ahead peak limiter: keeps ``|audio| <= ceiling`` without hard clipping.
+
+    The gain needed at each sample is spread over ``window`` samples (about
+    10 ms at 24 kHz) before and after the peak: a minimum filter makes every
+    sample in reach of a peak take its gain, and a box average of the same
+    width smooths the transitions. The average of minima around a sample never
+    exceeds that sample's own required gain, so the ceiling holds exactly.
+    """
+    audio = audio.astype(np.float32, copy=False)
+    if audio.size == 0:
+        return audio
+    window = max(1, int(window)) | 1
+    envelope = maximum_filter1d(np.abs(audio), size=window)
+    gain = np.minimum(1.0, ceiling / np.maximum(envelope, 1e-9))
+    if gain.min() >= 1.0:
+        return audio
+    gain = uniform_filter1d(minimum_filter1d(gain, size=window), size=window)
+    # Guard the float rounding of the box average.
+    return np.clip(audio * gain, -ceiling, ceiling).astype(np.float32)
+
+
+def apply_speed(audio: np.ndarray, sample_rate: int, speed: float) -> np.ndarray:
+    """Time-stretch without changing pitch. ``speed`` > 1 shortens the clip."""
+    if abs(speed - 1.0) < 1e-3 or audio.size == 0:
+        return audio
+    stretched = librosa.effects.time_stretch(audio.astype(np.float32), rate=speed)
+    return stretched.astype(audio.dtype, copy=False)
 
 
 def load_audio(

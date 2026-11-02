@@ -400,6 +400,10 @@ async def stream_speech(
 
         audio = normalize_audio(audio)
 
+    from ..utils.audio_finish import finish_audio
+
+    audio = finish_audio(audio, sample_rate)
+
     wav_bytes = tts.audio_to_wav_bytes(audio, sample_rate)
 
     async def _wav_stream():

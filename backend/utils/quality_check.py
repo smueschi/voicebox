@@ -38,7 +38,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SETTINGS = {"enabled": True, "max_wer": 0.1, "max_attempts": 3}
+DEFAULT_SETTINGS = {"enabled": True, "max_wer": 0.1, "max_attempts": 3, "best_of": 1}
 WHISPER_MODEL = "small"
 WHISPER_REPO = "Systran/faster-whisper-small"
 WHISPER_SAMPLE_RATE = 16000
@@ -182,6 +182,8 @@ class QualityCheck:
     language: str
     max_wer: float = DEFAULT_SETTINGS["max_wer"]
     max_attempts: int = DEFAULT_SETTINGS["max_attempts"]
+    # Takes generated per chunk even when the first passes; the best one wins.
+    best_of: int = DEFAULT_SETTINGS["best_of"]
 
     async def check(self, audio: np.ndarray, sample_rate: int, text: str) -> Optional[Verdict]:
         """None when the check itself failed; the chunk is then kept as is."""
@@ -207,4 +209,5 @@ def get_quality_check(language: str) -> Optional[QualityCheck]:
         language=language,
         max_wer=float(settings["max_wer"]),
         max_attempts=max(1, int(settings["max_attempts"])),
+        best_of=min(2, max(1, int(settings.get("best_of", 1)))),
     )

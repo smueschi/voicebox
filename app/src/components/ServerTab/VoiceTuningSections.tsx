@@ -13,12 +13,18 @@ import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { Toggle } from '@/components/ui/toggle';
 import { apiClient } from '@/lib/api/client';
-import type { QualityCheckSettings, QwenCppSettings, TextPrepSettings } from '@/lib/api/types';
+import type {
+  AudioFinishSettings,
+  QualityCheckSettings,
+  QwenCppSettings,
+  TextPrepSettings,
+} from '@/lib/api/types';
 import { SettingRow, SettingSection } from './SettingRow';
 
 const TEXT_PREP_KEY = ['settings', 'text-prep'];
 const QWEN_CPP_KEY = ['settings', 'qwen-cpp'];
 const QUALITY_CHECK_KEY = ['settings', 'quality-check'];
+const AUDIO_FINISH_KEY = ['settings', 'audio-finish'];
 
 /** Spoken-form text preparation: numbers, currencies, pronunciation dictionary. */
 export function TextPrepSection() {
@@ -173,8 +179,123 @@ export function QualityCheckSection() {
               </Select>
             }
           />
+          <SettingRow
+            title={t('settings.qualityCheck.bestOf.title')}
+            description={t('settings.qualityCheck.bestOf.description')}
+            htmlFor="qualityCheckBestOf"
+            action={
+              <Toggle
+                id="qualityCheckBestOf"
+                checked={(data?.best_of ?? 1) >= 2}
+                onCheckedChange={(v) => mutation.mutate({ best_of: v ? 2 : 1 })}
+              />
+            }
+          />
         </>
       )}
+    </SettingSection>
+  );
+}
+
+const LOUDNESS_OPTIONS: { value: number; key: string }[] = [
+  { value: -14, key: 'youtube' },
+  { value: -16, key: 'podcast' },
+  { value: -20, key: 'quiet' },
+  { value: 0, key: 'off' },
+];
+
+/** Final processing for video use: loudness, de-esser, limiter, speaking rate. */
+export function AudioFinishSection() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const { data } = useQuery({
+    queryKey: AUDIO_FINISH_KEY,
+    queryFn: () => apiClient.getAudioFinishSettings(),
+  });
+  const mutation = useMutation({
+    mutationFn: (patch: Partial<AudioFinishSettings>) => apiClient.updateAudioFinishSettings(patch),
+    onSuccess: (next) => queryClient.setQueryData(AUDIO_FINISH_KEY, next),
+  });
+  const [strength, setStrength] = useState(data?.deesser_strength ?? 0.5);
+  const [speed, setSpeed] = useState(data?.speed ?? 1);
+  useEffect(() => setStrength(data?.deesser_strength ?? 0.5), [data?.deesser_strength]);
+  useEffect(() => setSpeed(data?.speed ?? 1), [data?.speed]);
+  const deesser = data?.deesser ?? true;
+
+  return (
+    <SettingSection
+      title={t('settings.audioFinish.title')}
+      description={t('settings.audioFinish.description')}
+    >
+      <SettingRow
+        title={t('settings.audioFinish.loudness.title')}
+        description={t('settings.audioFinish.loudness.description')}
+        action={
+          <Select
+            value={String(data?.loudness_lufs ?? -14)}
+            onValueChange={(v) => mutation.mutate({ loudness_lufs: Number(v) })}
+          >
+            <SelectTrigger className="w-[190px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LOUDNESS_OPTIONS.map((o) => (
+                <SelectItem key={o.key} value={String(o.value)}>
+                  {t(`settings.audioFinish.loudness.${o.key}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+      />
+      <SettingRow
+        title={t('settings.audioFinish.deesser.title')}
+        description={t('settings.audioFinish.deesser.description')}
+        htmlFor="audioFinishDeesser"
+        action={
+          <Toggle
+            id="audioFinishDeesser"
+            checked={deesser}
+            onCheckedChange={(v) => mutation.mutate({ deesser: v })}
+          />
+        }
+      />
+      {deesser && (
+        <SettingRow
+          title={t('settings.audioFinish.strength.title')}
+          action={
+            <span className="text-sm tabular-nums text-muted-foreground">
+              {strength <= 0.5 ? t('settings.audioFinish.strength.light') : t('settings.audioFinish.strength.strong')}{' '}
+              ({Math.round(strength * 100)} %)
+            </span>
+          }
+        >
+          <Slider
+            value={[strength]}
+            onValueChange={([v]) => setStrength(v)}
+            onValueCommit={([v]) => mutation.mutate({ deesser_strength: v })}
+            min={0.1}
+            max={1}
+            step={0.1}
+            aria-label={t('settings.audioFinish.strength.title')}
+          />
+        </SettingRow>
+      )}
+      <SettingRow
+        title={t('settings.audioFinish.speed.title')}
+        description={t('settings.audioFinish.speed.description')}
+        action={<span className="text-sm tabular-nums text-muted-foreground">{speed.toFixed(2)}×</span>}
+      >
+        <Slider
+          value={[speed]}
+          onValueChange={([v]) => setSpeed(v)}
+          onValueCommit={([v]) => mutation.mutate({ speed: v })}
+          min={0.85}
+          max={1.15}
+          step={0.05}
+          aria-label={t('settings.audioFinish.speed.title')}
+        />
+      </SettingRow>
     </SettingSection>
   );
 }

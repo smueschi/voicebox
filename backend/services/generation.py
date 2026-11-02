@@ -73,6 +73,7 @@ async def run_generation(
     )
     from ..utils.chunked_tts import generate_chunked
     from ..utils.audio import has_tts_runaway, normalize_audio, save_audio, trim_tts_output
+    from ..utils.audio_finish import finish_audio
     from ..utils.quality_check import get_quality_check
 
     task_manager = get_task_manager()
@@ -116,6 +117,7 @@ async def run_generation(
         # --- Normalize (generate and regenerate always; retry skips) -----
         if normalize or mode == "regenerate":
             audio = normalize_audio(audio)
+        audio = finish_audio(audio, sample_rate)
 
         duration = len(audio) / sample_rate
 
@@ -303,6 +305,7 @@ async def generate_audio_sync(
     )
     from ..utils.chunked_tts import generate_chunked
     from ..utils.audio import has_tts_runaway, normalize_audio, trim_tts_output
+    from ..utils.audio_finish import finish_audio
     from . import tts
 
     bg_db = next(get_db())
@@ -342,6 +345,7 @@ async def generate_audio_sync(
 
         if normalize:
             audio = normalize_audio(audio)
+        audio = finish_audio(audio, sample_rate)
 
         return tts.audio_to_wav_bytes(audio, sample_rate)
     finally:

@@ -360,6 +360,7 @@ class QualityCheckSettings(BaseModel):
     enabled: bool = True
     max_wer: float = Field(default=0.1, ge=0.0, le=1.0)
     max_attempts: int = Field(default=3, ge=1, le=5)
+    best_of: int = Field(default=1, ge=1, le=2)
     available: bool = True
 
 
@@ -367,6 +368,23 @@ class QualityCheckSettingsUpdate(BaseModel):
     enabled: Optional[bool] = None
     max_wer: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     max_attempts: Optional[int] = Field(default=None, ge=1, le=5)
+    best_of: Optional[int] = Field(default=None, ge=1, le=2)
+
+
+class AudioFinishSettings(BaseModel):
+    """Final processing for video use. Stored in <data dir>/audio_finish.json."""
+
+    loudness_lufs: float = Field(default=-14.0, ge=-30.0, le=0.0)  # 0 = keep level
+    deesser: bool = True
+    deesser_strength: float = Field(default=0.5, ge=0.0, le=1.0)
+    speed: float = Field(default=1.0, ge=0.8, le=1.2)
+
+
+class AudioFinishSettingsUpdate(BaseModel):
+    loudness_lufs: Optional[float] = Field(default=None, ge=-30.0, le=0.0)
+    deesser: Optional[bool] = None
+    deesser_strength: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    speed: Optional[float] = Field(default=None, ge=0.8, le=1.2)
 
 
 class QwenCppSettings(BaseModel):

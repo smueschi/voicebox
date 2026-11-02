@@ -284,6 +284,11 @@ def build_server(cuda=False, rocm=False):
             # Whisper quality check per chunk (faster-whisper / CTranslate2).
             "--hidden-import",
             "backend.utils.quality_check",
+            # Final processing: de-esser, loudness, limiter, speed.
+            "--hidden-import",
+            "backend.utils.audio_finish",
+            "--hidden-import",
+            "pyloudnorm",
             "--collect-all",
             "faster_whisper",
             "--collect-binaries",

@@ -1224,6 +1224,31 @@
       "buyCoffee": "Buy me a coffee",
       "license": "Licensed under <link>MIT</link>"
     },
+    "audioFinish": {
+      "title": "Sound for video",
+      "description": "Final processing of every generated clip: loudness, softer S sounds, a limiter instead of clipping, and speaking rate.",
+      "loudness": {
+        "title": "Loudness",
+        "description": "Integrated loudness of the finished clip. Peaks stay below −1 dBFS.",
+        "youtube": "−14 LUFS (YouTube)",
+        "podcast": "−16 LUFS (podcast)",
+        "quiet": "−20 LUFS (quiet)",
+        "off": "Keep level"
+      },
+      "deesser": {
+        "title": "De-esser",
+        "description": "Softens sharp S, Z and Sch sounds. Only the 5–10 kHz band is lowered, and only while it dominates."
+      },
+      "strength": {
+        "title": "De-esser strength",
+        "light": "light",
+        "strong": "strong"
+      },
+      "speed": {
+        "title": "Speaking rate",
+        "description": "Slower or faster without changing the pitch. Use [pause] or [pause 1.5] in the text for deliberate pauses."
+      }
+    },
     "qualityCheck": {
       "title": "Quality check",
       "description": "Whisper listens to every generated chunk and compares it with your text. Chunks with missing or extra words are generated again with another seed; the best attempt is kept.",
@@ -1240,6 +1265,10 @@
         "title": "Attempts per chunk",
         "description": "Including the first one.",
         "option": "{{count}} attempts"
+      },
+      "bestOf": {
+        "title": "Best of 2 takes",
+        "description": "Generates every chunk twice and keeps the take with fewer word errors. More even quality, double the generation time."
       }
     },
     "textPrep": {

@@ -205,6 +205,50 @@ def concatenate_audio_chunks(
     return result
 
 
+PAUSE_MARKER_RE = re.compile(r"\[\s*pause(?:\s+(\d+(?:[.,]\d+)?)\s*s?)?\s*\]", re.IGNORECASE)
+DEFAULT_PAUSE_S = 0.6
+MAX_PAUSE_S = 5.0
+PAUSE_FADE_MS = 10
+PAUSE_SEGMENT_SEED_STEP = 1000
+
+
+def split_pause_markers(text: str) -> List[Tuple[str, float]]:
+    """Split at ``[pause]`` / ``[pause 1.5]`` markers.
+
+    Returns ``(segment, pause_after_seconds)`` pairs; the last pause is 0
+    unless the text ends with a marker. Without markers: ``[(text, 0.0)]``.
+    """
+    pieces: List[Tuple[str, float]] = []
+    pos = 0
+    for match in PAUSE_MARKER_RE.finditer(text):
+        seconds = DEFAULT_PAUSE_S
+        if match.group(1):
+            seconds = min(MAX_PAUSE_S, float(match.group(1).replace(",", ".")))
+        pieces.append((text[pos : match.start()].strip(), seconds))
+        pos = match.end()
+    pieces.append((text[pos:].strip(), 0.0))
+    if len(pieces) > 1 and not pieces[-1][0]:
+        pieces.pop()
+    return pieces
+
+
+def join_with_pauses(pieces: List[Tuple[np.ndarray, float]], sample_rate: int) -> np.ndarray:
+    """Concatenate audio segments with silence; segment edges get a short fade."""
+    fade = int(sample_rate * PAUSE_FADE_MS / 1000)
+    out: List[np.ndarray] = []
+    for audio, pause_s in pieces:
+        audio = np.array(audio, dtype=np.float32, copy=True)
+        n = min(fade, len(audio) // 2)
+        if n > 0:
+            ramp = np.linspace(0.0, 1.0, n, dtype=np.float32)
+            audio[:n] *= ramp
+            audio[-n:] *= ramp[::-1]
+        out.append(audio)
+        if pause_s > 0:
+            out.append(np.zeros(int(sample_rate * pause_s), dtype=np.float32))
+    return np.concatenate(out) if out else np.zeros(0, dtype=np.float32)
+
+
 async def generate_chunked(
     backend,
     text: str,
@@ -258,8 +302,6 @@ async def generate_chunked(
     (audio, sample_rate) : Tuple[np.ndarray, int]
     """
     from .text_prep import prepare_text
-
-    text = prepare_text(text, language)
 
     async def generate_one(
         chunk_text: str,
@@ -330,7 +372,8 @@ async def generate_chunked(
         if quality_check is None:
             return await generate_one(chunk_text, chunk_seed)
         best = None
-        for attempt in range(quality_check.max_attempts):
+        attempts = max(quality_check.max_attempts, quality_check.best_of)
+        for attempt in range(attempts):
             attempt_seed = chunk_seed
             if attempt and chunk_seed is not None:
                 attempt_seed = chunk_seed + QUALITY_RETRY_SEED_STEP * attempt
@@ -341,17 +384,25 @@ async def generate_chunked(
             if best is None or verdict.errors < best[0].errors:
                 best = (verdict, audio, sample_rate)
             if verdict.ok:
+                if attempt + 1 >= quality_check.best_of:
+                    logger.info(
+                        "Quality check passed on attempt %d: %d word errors in %d words, keeping %d",
+                        attempt + 1,
+                        verdict.errors,
+                        verdict.words,
+                        best[0].errors,
+                    )
+                    break
                 logger.info(
-                    "Quality check passed on attempt %d: %d word errors in %d words",
+                    "Quality check: take %d passed with %d word errors, generating another take",
                     attempt + 1,
                     verdict.errors,
-                    verdict.words,
                 )
-                break
+                continue
             logger.warning(
                 "Quality check: attempt %d/%d got %d word errors in %d words (%.0f%%); heard: %r",
                 attempt + 1,
-                quality_check.max_attempts,
+                attempts,
                 verdict.errors,
                 verdict.words,
                 verdict.wer * 100,
@@ -359,42 +410,61 @@ async def generate_chunked(
             )
         return best[1], best[2]
 
-    chunks = split_text_into_chunks(text, max_chunk_chars)
+    async def generate_segment(segment: str, seed: int | None) -> tuple[np.ndarray, int]:
+        chunks = split_text_into_chunks(segment, max_chunk_chars)
 
-    if len(chunks) <= 1:
-        # Short text — single-shot fast path
-        return await generate_checked(text, seed)
+        if len(chunks) <= 1:
+            # Short text — single-shot fast path
+            return await generate_checked(segment, seed)
 
-    # Long text — chunked generation
-    logger.info(
-        "Splitting %d chars into %d chunks (max %d chars each)",
-        len(text),
-        len(chunks),
-        max_chunk_chars,
-    )
-    audio_chunks: List[np.ndarray] = []
-    sample_rate: int | None = None
-
-    for i, chunk_text in enumerate(chunks):
+        # Long text — chunked generation
         logger.info(
-            "Generating chunk %d/%d (%d chars)",
-            i + 1,
+            "Splitting %d chars into %d chunks (max %d chars each)",
+            len(segment),
             len(chunks),
-            len(chunk_text),
+            max_chunk_chars,
         )
-        # Vary the seed per chunk to avoid correlated RNG artefacts,
-        # but keep it deterministic so the same (text, seed) pair
-        # always produces the same output.
-        chunk_seed = (seed + i) if seed is not None else None
+        audio_chunks: List[np.ndarray] = []
+        sample_rate: int | None = None
 
-        chunk_audio, chunk_sr = await generate_checked(
-            chunk_text,
-            chunk_seed,
-        )
+        for i, chunk_text in enumerate(chunks):
+            logger.info(
+                "Generating chunk %d/%d (%d chars)",
+                i + 1,
+                len(chunks),
+                len(chunk_text),
+            )
+            # Vary the seed per chunk to avoid correlated RNG artefacts,
+            # but keep it deterministic so the same (text, seed) pair
+            # always produces the same output.
+            chunk_seed = (seed + i) if seed is not None else None
 
-        audio_chunks.append(chunk_audio)
-        if sample_rate is None:
-            sample_rate = chunk_sr
+            chunk_audio, chunk_sr = await generate_checked(
+                chunk_text,
+                chunk_seed,
+            )
 
-    audio = concatenate_audio_chunks(audio_chunks, sample_rate, crossfade_ms=crossfade_ms)
-    return audio, sample_rate
+            audio_chunks.append(chunk_audio)
+            if sample_rate is None:
+                sample_rate = chunk_sr
+
+        audio = concatenate_audio_chunks(audio_chunks, sample_rate, crossfade_ms=crossfade_ms)
+        return audio, sample_rate
+
+    segments = split_pause_markers(text)
+    if len(segments) == 1 and segments[0][1] == 0:
+        return await generate_segment(prepare_text(text, language), seed)
+
+    logger.info("Pause markers split the text into %d segments", len(segments))
+    pieces: List[Tuple[np.ndarray, float]] = []
+    sample_rate: int | None = None
+    for i, (segment, pause_s) in enumerate(segments):
+        segment = prepare_text(segment, language)
+        audio = np.zeros(0, dtype=np.float32)
+        if segment.strip():
+            segment_seed = seed + PAUSE_SEGMENT_SEED_STEP * i if seed is not None else None
+            audio, sample_rate = await generate_segment(segment, segment_seed)
+        pieces.append((audio, pause_s))
+    if sample_rate is None:
+        raise ValueError("Text contains only pause markers")
+    return join_with_pauses(pieces, sample_rate), sample_rate

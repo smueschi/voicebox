@@ -22,6 +22,8 @@ logger = logging.getLogger("voicebox.chunked-tts")
 DEFAULT_MAX_CHUNK_CHARS = 800
 MAX_RUNAWAY_RETRIES = 2
 MIN_RUNAWAY_RETRY_CHARS = 100
+# Seed offset per quality-check retry (prime, far from the per-chunk +i offsets)
+QUALITY_RETRY_SEED_STEP = 7919
 
 # Common abbreviations that should NOT be treated as sentence endings.
 # Lowercase for case-insensitive matching.
@@ -214,6 +216,7 @@ async def generate_chunked(
     crossfade_ms: int = 50,
     trim_fn=None,
     runaway_detector=None,
+    quality_check=None,
 ) -> Tuple[np.ndarray, int]:
     """Generate audio with automatic chunking for long text.
 
@@ -245,6 +248,10 @@ async def generate_chunked(
     runaway_detector : callable | None
         Optional ``(audio, sample_rate) -> bool`` detector. When it flags
         unstable output, the affected text is split in half and retried.
+    quality_check : QualityCheck | None
+        Optional Whisper check (``utils.quality_check``). A chunk with
+        missing or extra words is generated again with another seed, up to
+        ``max_attempts`` times; the attempt with the fewest errors is kept.
 
     Returns
     -------
@@ -319,11 +326,44 @@ async def generate_chunked(
             chunk_audio = trim_fn(chunk_audio, chunk_sr)
         return np.asarray(chunk_audio, dtype=np.float32), chunk_sr
 
+    async def generate_checked(chunk_text: str, chunk_seed: int | None) -> tuple[np.ndarray, int]:
+        if quality_check is None:
+            return await generate_one(chunk_text, chunk_seed)
+        best = None
+        for attempt in range(quality_check.max_attempts):
+            attempt_seed = chunk_seed
+            if attempt and chunk_seed is not None:
+                attempt_seed = chunk_seed + QUALITY_RETRY_SEED_STEP * attempt
+            audio, sample_rate = await generate_one(chunk_text, attempt_seed)
+            verdict = await quality_check.check(audio, sample_rate, chunk_text)
+            if verdict is None:
+                return audio, sample_rate
+            if best is None or verdict.errors < best[0].errors:
+                best = (verdict, audio, sample_rate)
+            if verdict.ok:
+                logger.info(
+                    "Quality check passed on attempt %d: %d word errors in %d words",
+                    attempt + 1,
+                    verdict.errors,
+                    verdict.words,
+                )
+                break
+            logger.warning(
+                "Quality check: attempt %d/%d got %d word errors in %d words (%.0f%%); heard: %r",
+                attempt + 1,
+                quality_check.max_attempts,
+                verdict.errors,
+                verdict.words,
+                verdict.wer * 100,
+                verdict.heard[:200],
+            )
+        return best[1], best[2]
+
     chunks = split_text_into_chunks(text, max_chunk_chars)
 
     if len(chunks) <= 1:
         # Short text — single-shot fast path
-        return await generate_one(text, seed)
+        return await generate_checked(text, seed)
 
     # Long text — chunked generation
     logger.info(
@@ -347,7 +387,7 @@ async def generate_chunked(
         # always produces the same output.
         chunk_seed = (seed + i) if seed is not None else None
 
-        chunk_audio, chunk_sr = await generate_one(
+        chunk_audio, chunk_sr = await generate_checked(
             chunk_text,
             chunk_seed,
         )

@@ -67,6 +67,26 @@ async def preview_text_prep(payload: dict):
     return {"spoken": text_prep.spoken_form(text, language, rules)}
 
 
+@router.get("/quality-check", response_model=models.QualityCheckSettings)
+async def get_quality_check_settings():
+    import importlib.util
+
+    from ..utils import quality_check
+
+    return models.QualityCheckSettings(
+        **quality_check.load_settings(),
+        available=importlib.util.find_spec("faster_whisper") is not None,
+    )
+
+
+@router.put("/quality-check", response_model=models.QualityCheckSettings)
+async def update_quality_check_settings(patch: models.QualityCheckSettingsUpdate):
+    from ..utils import quality_check
+
+    quality_check.save_settings(patch.model_dump(exclude_unset=True))
+    return await get_quality_check_settings()
+
+
 @router.get("/qwen-cpp", response_model=models.QwenCppSettings)
 async def get_qwen_cpp_settings():
     from ..backends import get_tts_backend_for_engine

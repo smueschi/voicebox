@@ -1224,6 +1224,24 @@
       "buyCoffee": "Buy me a coffee",
       "license": "Licensed under <link>MIT</link>"
     },
+    "qualityCheck": {
+      "title": "Quality check",
+      "description": "Whisper listens to every generated chunk and compares it with your text. Chunks with missing or extra words are generated again with another seed; the best attempt is kept.",
+      "enabled": {
+        "title": "Check and retry automatically",
+        "description": "Adds about 10 % to the generation time (Whisper small on the CPU).",
+        "unavailable": "faster-whisper is not installed in this build."
+      },
+      "maxWer": {
+        "title": "Allowed word errors",
+        "description": "Share of missing, extra or wrong words before a chunk is retried. A single misheard word never triggers a retry."
+      },
+      "attempts": {
+        "title": "Attempts per chunk",
+        "description": "Including the first one.",
+        "option": "{{count}} attempts"
+      }
+    },
     "textPrep": {
       "title": "Text preparation",
       "description": "Rewrites numbers, currencies and abbreviations into spoken words before synthesis (German and English), then applies your pronunciation dictionary.",

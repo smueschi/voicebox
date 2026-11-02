@@ -281,6 +281,13 @@ def build_server(cuda=False, rocm=False):
             "backend.utils.text_prep",
             "--collect-submodules",
             "num2words",
+            # Whisper quality check per chunk (faster-whisper / CTranslate2).
+            "--hidden-import",
+            "backend.utils.quality_check",
+            "--collect-all",
+            "faster_whisper",
+            "--collect-binaries",
+            "ctranslate2",
             # The Higgs Audio V2 codec is vendored from transformers 5.x (we are
             # capped at 4.57.6). Both the shim and the vendored package are
             # imported from inside a function, so name them explicitly.

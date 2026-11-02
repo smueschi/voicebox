@@ -47,3 +47,16 @@ sub-talker values can be edited there as well.
   abbreviations are spoken out in German/English before synthesis, plus a
   user pronunciation dictionary (`<data dir>/pronunciation.txt`).
 - **Subtitles**: History → ⋯ → *Export subtitles (SRT)*, one cue per sentence.
+- **Quality check** (Settings → Generation, all engines): faster-whisper `small`
+  (int8, CPU) transcribes each generated chunk and compares it word by word with
+  the text, after the same spoken-form rewrite on both sides. Chunks with missing
+  or extra words (default: over 10 % and at least 2 words) are generated again
+  with another seed, up to 3 attempts; the attempt with the fewest errors is kept.
+  Costs about 0.1× real time. Whisper runs in a separate worker process because
+  CTranslate2's OpenMP runtime and PyTorch's cannot share a process on Windows.
+  Applies to the generate / retry / regenerate pipeline, not to streaming or the
+  OpenAI-compatible endpoint.
+
+A warm-up generation after loading was measured and left out: the GPU driver
+caches the compiled Vulkan shaders on disk, so only the first start after a
+reboot is about 2 s slower, while a warm-up would cost 1.5–2 s on every load.

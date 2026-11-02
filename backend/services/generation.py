@@ -73,6 +73,7 @@ async def run_generation(
     )
     from ..utils.chunked_tts import generate_chunked
     from ..utils.audio import has_tts_runaway, normalize_audio, save_audio, trim_tts_output
+    from ..utils.quality_check import get_quality_check
 
     task_manager = get_task_manager()
     bg_db = next(get_db())
@@ -103,6 +104,7 @@ async def run_generation(
             instruct=instruct,
             trim_fn=trim_fn,
             runaway_detector=runaway_detector,
+            quality_check=get_quality_check(language),
         )
         if max_chunk_chars is not None:
             gen_kwargs["max_chunk_chars"] = max_chunk_chars

@@ -18,6 +18,8 @@ accelerate>=0.26.0
 huggingface_hub>=0.20.0
 # Spoken-form text preparation (numbers, currencies) — backend/utils/text_prep.py
 num2words>=0.5.13
+# Whisper check per generated chunk with automatic retry — backend/utils/quality_check.py
+faster-whisper>=1.1.0
 # >=0.1.1 for Qwen3TTSModel.generate_voice_design (the qwen_voice_design engine)
 qwen-tts>=0.1.1
 

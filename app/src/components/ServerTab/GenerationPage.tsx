@@ -8,7 +8,7 @@ import { useGenerationSettings } from '@/lib/hooks/useSettings';
 import { usePlatform } from '@/platform/PlatformContext';
 import { useServerStore } from '@/stores/serverStore';
 import { SettingRow, SettingSection } from './SettingRow';
-import { QwenCppSection, TextPrepSection } from './VoiceTuningSections';
+import { QualityCheckSection, QwenCppSection, TextPrepSection } from './VoiceTuningSections';
 
 export function GenerationPage() {
   const { t } = useTranslation();
@@ -149,6 +149,7 @@ export function GenerationPage() {
 
       <QwenCppSection />
 
+      <QualityCheckSection />
       <TextPrepSection />
       </div>
 

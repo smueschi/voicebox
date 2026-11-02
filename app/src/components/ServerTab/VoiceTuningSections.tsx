@@ -13,11 +13,12 @@ import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { Toggle } from '@/components/ui/toggle';
 import { apiClient } from '@/lib/api/client';
-import type { QwenCppSettings, TextPrepSettings } from '@/lib/api/types';
+import type { QualityCheckSettings, QwenCppSettings, TextPrepSettings } from '@/lib/api/types';
 import { SettingRow, SettingSection } from './SettingRow';
 
 const TEXT_PREP_KEY = ['settings', 'text-prep'];
 const QWEN_CPP_KEY = ['settings', 'qwen-cpp'];
+const QUALITY_CHECK_KEY = ['settings', 'quality-check'];
 
 /** Spoken-form text preparation: numbers, currencies, pronunciation dictionary. */
 export function TextPrepSection() {
@@ -90,6 +91,90 @@ export function TextPrepSection() {
         <Textarea value={sample} onChange={(e) => setSample(e.target.value)} rows={2} />
         {spoken !== null && <p className="text-sm text-muted-foreground mt-2">{spoken}</p>}
       </SettingRow>
+    </SettingSection>
+  );
+}
+
+/** Whisper check per chunk: retries chunks with missing or extra words. */
+export function QualityCheckSection() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const { data } = useQuery({
+    queryKey: QUALITY_CHECK_KEY,
+    queryFn: () => apiClient.getQualityCheckSettings(),
+  });
+  const mutation = useMutation({
+    mutationFn: (patch: Partial<QualityCheckSettings>) => apiClient.updateQualityCheckSettings(patch),
+    onSuccess: (next) => queryClient.setQueryData(QUALITY_CHECK_KEY, next),
+  });
+  const [maxWer, setMaxWer] = useState(data?.max_wer ?? 0.1);
+  useEffect(() => setMaxWer(data?.max_wer ?? 0.1), [data?.max_wer]);
+  const enabled = (data?.enabled ?? true) && (data?.available ?? true);
+
+  return (
+    <SettingSection
+      title={t('settings.qualityCheck.title')}
+      description={t('settings.qualityCheck.description')}
+    >
+      <SettingRow
+        title={t('settings.qualityCheck.enabled.title')}
+        description={
+          data && !data.available
+            ? t('settings.qualityCheck.enabled.unavailable')
+            : t('settings.qualityCheck.enabled.description')
+        }
+        htmlFor="qualityCheckEnabled"
+        action={
+          <Toggle
+            id="qualityCheckEnabled"
+            checked={enabled}
+            disabled={data !== undefined && !data.available}
+            onCheckedChange={(v) => mutation.mutate({ enabled: v })}
+          />
+        }
+      />
+      {enabled && (
+        <>
+          <SettingRow
+            title={t('settings.qualityCheck.maxWer.title')}
+            description={t('settings.qualityCheck.maxWer.description')}
+            action={
+              <span className="text-sm tabular-nums text-muted-foreground">{Math.round(maxWer * 100)} %</span>
+            }
+          >
+            <Slider
+              value={[maxWer]}
+              onValueChange={([v]) => setMaxWer(v)}
+              onValueCommit={([v]) => mutation.mutate({ max_wer: v })}
+              min={0.05}
+              max={0.3}
+              step={0.05}
+              aria-label={t('settings.qualityCheck.maxWer.title')}
+            />
+          </SettingRow>
+          <SettingRow
+            title={t('settings.qualityCheck.attempts.title')}
+            description={t('settings.qualityCheck.attempts.description')}
+            action={
+              <Select
+                value={String(data?.max_attempts ?? 3)}
+                onValueChange={(v) => mutation.mutate({ max_attempts: Number(v) })}
+              >
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[2, 3, 4, 5].map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {t('settings.qualityCheck.attempts.option', { count: n })}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            }
+          />
+        </>
+      )}
     </SettingSection>
   );
 }

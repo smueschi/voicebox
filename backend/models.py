@@ -354,6 +354,21 @@ class TextPrepSettingsUpdate(BaseModel):
     dictionary: Optional[str] = Field(default=None, max_length=200_000)
 
 
+class QualityCheckSettings(BaseModel):
+    """Whisper check per chunk with automatic retry. Stored in <data dir>/quality_check.json."""
+
+    enabled: bool = True
+    max_wer: float = Field(default=0.1, ge=0.0, le=1.0)
+    max_attempts: int = Field(default=3, ge=1, le=5)
+    available: bool = True
+
+
+class QualityCheckSettingsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    max_wer: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    max_attempts: Optional[int] = Field(default=None, ge=1, le=5)
+
+
 class QwenCppSettings(BaseModel):
     """Tuning for the qwen_cpp engine (qwentts.cpp). Stored in <data dir>/qwen_cpp.json."""
 

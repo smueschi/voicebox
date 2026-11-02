@@ -88,12 +88,13 @@ def parse_rules(content: str) -> list[tuple[str, str]]:
     return sorted(rules, key=lambda r: len(r[0]), reverse=True)
 
 
-def apply_rules(text: str, rules: list[tuple[str, str]]) -> str:
+def apply_rules(text: str, rules: list[tuple[str, str]], ignore_case: bool = False) -> str:
+    flags = re.IGNORECASE if ignore_case else 0
     for src, dst in rules:
         if re.match(r"\w", src[0]) and re.match(r"\w", src[-1]):
-            text = re.sub(rf"(?<!\w){re.escape(src)}(?!\w)", dst, text)
+            text = re.sub(rf"(?<!\w){re.escape(src)}(?!\w)", lambda _m, d=dst: d, text, flags=flags)
         else:
-            text = text.replace(src, dst)
+            text = re.sub(re.escape(src), lambda _m, d=dst: d, text, flags=flags)
     return text
 
 

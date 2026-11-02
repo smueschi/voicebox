@@ -55,6 +55,7 @@ import type {
   MCPClientBindingUpsert,
   CloudLoginStartResponse,
   CloudStatus,
+  QualityCheckSettings,
   QwenCppSettings,
   TextPrepSettings,
 } from './types';
@@ -546,6 +547,18 @@ class ApiClient {
     return this.request<{ spoken: string }>('/settings/text-prep/preview', {
       method: 'POST',
       body: JSON.stringify({ text, language }),
+    });
+  }
+
+  // Whisper check per chunk with automatic retry.
+  async getQualityCheckSettings(): Promise<QualityCheckSettings> {
+    return this.request<QualityCheckSettings>('/settings/quality-check');
+  }
+
+  async updateQualityCheckSettings(patch: Partial<QualityCheckSettings>): Promise<QualityCheckSettings> {
+    return this.request<QualityCheckSettings>('/settings/quality-check', {
+      method: 'PUT',
+      body: JSON.stringify(patch),
     });
   }
 

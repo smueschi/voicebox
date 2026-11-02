@@ -594,6 +594,13 @@ export interface TextPrepSettings {
   dictionary: string;
 }
 
+export interface QualityCheckSettings {
+  enabled: boolean;
+  max_wer: number;
+  max_attempts: number;
+  available: boolean;
+}
+
 export interface QwenCppSettings {
   talker_precision: 'Q8_0' | 'BF16' | 'F32' | 'Q4_K_M';
   codec_precision: 'Q8_0' | 'BF16' | 'F32' | 'Q4_K_M';

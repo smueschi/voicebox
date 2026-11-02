@@ -56,6 +56,18 @@ sub-talker values can be edited there as well.
   CTranslate2's OpenMP runtime and PyTorch's cannot share a process on Windows.
   Applies to the generate / retry / regenerate pipeline, not to streaming or the
   OpenAI-compatible endpoint.
+- **Quiet reference recordings** are raised to −20 dBFS RMS (at most +30 dB, never
+  above the 0.95 peak cap) instead of being rejected as "too quiet", after a
+  60 Hz high-pass against rumble and mains hum. Only near-silent input (below
+  −55 dBFS) is still rejected.
+
+## Installing the fork (Windows)
+
+`just build` produces `tauri/src-tauri/target/release/bundle/nsis/Voicebox_<version>_x64-setup.exe`.
+It installs over an existing Voicebox and uses the same data directory
+(`%APPDATA%\sh.voicebox.app`). Copy the `tts-server` folder to
+`%APPDATA%\sh.voicebox.app\qwentts` once. The updater points at this fork's
+releases, so the app never replaces itself with an upstream build.
 
 A warm-up generation after loading was measured and left out: the GPU driver
 caches the compiled Vulkan shaders on disk, so only the first start after a

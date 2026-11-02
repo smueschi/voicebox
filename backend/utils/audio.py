@@ -5,7 +5,17 @@ Audio processing utilities.
 import numpy as np
 import soundfile as sf
 import librosa
+from scipy.signal import butter, sosfiltfilt
 from typing import Tuple, Optional
+
+# Reference leveling: quiet recordings (laptop or browser microphones) are
+# raised to this RMS instead of being rejected, up to REFERENCE_MAX_GAIN_DB.
+REFERENCE_TARGET_DBFS = -20.0
+REFERENCE_MAX_GAIN_DB = 30.0
+# Below this input RMS a recording counts as silence and is rejected.
+REFERENCE_SILENCE_DBFS = -55.0
+# Rumble and mains-hum high-pass. 60 Hz keeps low male fundamentals (~85 Hz).
+REFERENCE_HIGHPASS_HZ = 60.0
 
 
 def normalize_audio(
@@ -243,11 +253,14 @@ def preprocess_reference_audio(
     peak_target: float = 0.95,
     trim_top_db: float = 40.0,
     edge_padding_ms: int = 100,
+    target_dbfs: Optional[float] = REFERENCE_TARGET_DBFS,
 ) -> np.ndarray:
     """
     Clean up a reference-audio sample before validation/storage.
 
-    Removes DC offset, trims leading/trailing silence, and caps the peak so a
+    Removes DC offset and low-frequency rumble, trims leading/trailing
+    silence, raises quiet recordings to ``target_dbfs`` RMS (never above the
+    peak cap, at most ``REFERENCE_MAX_GAIN_DB``), and caps the peak so a
     slightly-hot recording doesn't get rejected downstream as "clipping". The
     goal is to accept reasonable real-world recordings — not to repair badly
     distorted ones. True clipping artifacts inside the waveform can't be
@@ -267,6 +280,8 @@ def preprocess_reference_audio(
             *only if* trimming shortened the waveform, so TTS engines have a
             brief silence to anchor on without ever making the output longer
             than the input.
+        target_dbfs: RMS level quiet recordings are raised to. Louder
+            recordings are left as they are. ``None`` disables leveling.
 
     Returns:
         Preprocessed audio array (float32).
@@ -277,6 +292,13 @@ def preprocess_reference_audio(
         return audio
 
     audio = audio - float(np.mean(audio))
+
+    sos = butter(4, REFERENCE_HIGHPASS_HZ, btype="highpass", fs=sample_rate, output="sos")
+    # Pad by 100 ms (odd extension) so the filter settles before the signal
+    # starts; the short default padding leaves an edge transient.
+    padlen = min(audio.size - 1, sample_rate // 10)
+    if padlen > 3 * (2 * len(sos) + 1):
+        audio = sosfiltfilt(sos, audio, padlen=padlen).astype(np.float32)
 
     trimmed, _ = librosa.effects.trim(audio, top_db=trim_top_db)
     if 0 < trimmed.size < audio.size:
@@ -291,6 +313,17 @@ def preprocess_reference_audio(
         audio = trimmed
 
     peak = float(np.abs(audio).max())
+    rms = float(np.sqrt(np.mean(audio**2)))
+    if target_dbfs is not None and rms > 0 and peak > 0:
+        gain = min(
+            10 ** (target_dbfs / 20) / rms,
+            10 ** (REFERENCE_MAX_GAIN_DB / 20),
+            peak_target / peak,
+        )
+        if gain > 1.0:
+            audio = audio * gain
+            peak *= gain
+
     if peak > peak_target and peak > 0:
         audio = audio * (peak_target / peak)
 
@@ -331,14 +364,19 @@ def validate_and_load_reference_audio(
     Validate and load reference audio in a single pass.
 
     Applies :func:`preprocess_reference_audio` before checks so that
-    slightly-hot recordings aren't rejected as clipping. Duration and RMS
-    checks run on the preprocessed waveform.
+    slightly-hot recordings aren't rejected as clipping and quiet ones are
+    raised instead of rejected. Only near-silent input (below
+    ``REFERENCE_SILENCE_DBFS``) fails the level check; duration and the
+    ``min_rms`` check run on the preprocessed waveform.
 
     Returns:
         Tuple of (is_valid, error_message, audio_array, sample_rate)
     """
     try:
         audio, sr = load_audio(audio_path)
+        input_rms = float(np.sqrt(np.mean((audio - np.mean(audio)) ** 2))) if audio.size else 0.0
+        if input_rms < 10 ** (REFERENCE_SILENCE_DBFS / 20):
+            return False, "Audio is too quiet or silent", None, None
         audio = preprocess_reference_audio(audio, sr)
         duration = len(audio) / sr
 

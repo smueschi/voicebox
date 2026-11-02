@@ -30,13 +30,18 @@ const AUDIO_FINISH_KEY = ['settings', 'audio-finish'];
 export function TextPrepSection() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { data } = useQuery({ queryKey: TEXT_PREP_KEY, queryFn: () => apiClient.getTextPrepSettings() });
+  const { data } = useQuery({
+    queryKey: TEXT_PREP_KEY,
+    queryFn: () => apiClient.getTextPrepSettings(),
+  });
   const mutation = useMutation({
     mutationFn: (patch: Partial<TextPrepSettings>) => apiClient.updateTextPrepSettings(patch),
     onSuccess: (next) => queryClient.setQueryData(TEXT_PREP_KEY, next),
   });
   const [dictionary, setDictionary] = useState('');
-  const [sample, setSample] = useState("Ein ETF kostet 0,2 % – bei CHF 10'000 also z.B. 20 Franken.");
+  const [sample, setSample] = useState(
+    "Ein ETF kostet 0,2 % – bei CHF 10'000 also z.B. 20 Franken.",
+  );
   const [spoken, setSpoken] = useState<string | null>(null);
   useEffect(() => setDictionary(data?.dictionary ?? ''), [data?.dictionary]);
 
@@ -110,7 +115,8 @@ export function QualityCheckSection() {
     queryFn: () => apiClient.getQualityCheckSettings(),
   });
   const mutation = useMutation({
-    mutationFn: (patch: Partial<QualityCheckSettings>) => apiClient.updateQualityCheckSettings(patch),
+    mutationFn: (patch: Partial<QualityCheckSettings>) =>
+      apiClient.updateQualityCheckSettings(patch),
     onSuccess: (next) => queryClient.setQueryData(QUALITY_CHECK_KEY, next),
   });
   const [maxWer, setMaxWer] = useState(data?.max_wer ?? 0.1);
@@ -145,7 +151,9 @@ export function QualityCheckSection() {
             title={t('settings.qualityCheck.maxWer.title')}
             description={t('settings.qualityCheck.maxWer.description')}
             action={
-              <span className="text-sm tabular-nums text-muted-foreground">{Math.round(maxWer * 100)} %</span>
+              <span className="text-sm tabular-nums text-muted-foreground">
+                {Math.round(maxWer * 100)} %
+              </span>
             }
           >
             <Slider
@@ -265,7 +273,9 @@ export function AudioFinishSection() {
           title={t('settings.audioFinish.strength.title')}
           action={
             <span className="text-sm tabular-nums text-muted-foreground">
-              {strength <= 0.5 ? t('settings.audioFinish.strength.light') : t('settings.audioFinish.strength.strong')}{' '}
+              {strength <= 0.5
+                ? t('settings.audioFinish.strength.light')
+                : t('settings.audioFinish.strength.strong')}{' '}
               ({Math.round(strength * 100)} %)
             </span>
           }
@@ -284,7 +294,9 @@ export function AudioFinishSection() {
       <SettingRow
         title={t('settings.audioFinish.speed.title')}
         description={t('settings.audioFinish.speed.description')}
-        action={<span className="text-sm tabular-nums text-muted-foreground">{speed.toFixed(2)}×</span>}
+        action={
+          <span className="text-sm tabular-nums text-muted-foreground">{speed.toFixed(2)}×</span>
+        }
       >
         <Slider
           value={[speed]}
@@ -306,7 +318,10 @@ const PRECISIONS: QwenCppSettings['talker_precision'][] = ['Q8_0', 'BF16', 'F32'
 export function QwenCppSection() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { data } = useQuery({ queryKey: QWEN_CPP_KEY, queryFn: () => apiClient.getQwenCppSettings() });
+  const { data } = useQuery({
+    queryKey: QWEN_CPP_KEY,
+    queryFn: () => apiClient.getQwenCppSettings(),
+  });
   const mutation = useMutation({
     mutationFn: (patch: Partial<QwenCppSettings>) => apiClient.updateQwenCppSettings(patch),
     onSuccess: (next) => queryClient.setQueryData(QWEN_CPP_KEY, next),
@@ -341,7 +356,10 @@ export function QwenCppSection() {
   );
 
   return (
-    <SettingSection title={t('settings.qwenCpp.title')} description={t('settings.qwenCpp.description')}>
+    <SettingSection
+      title={t('settings.qwenCpp.title')}
+      description={t('settings.qwenCpp.description')}
+    >
       <SettingRow
         title={t('settings.qwenCpp.status.title')}
         description={status}
@@ -366,7 +384,11 @@ export function QwenCppSection() {
       <SettingRow
         title={t('settings.qwenCpp.temperature.title')}
         description={t('settings.qwenCpp.temperature.description')}
-        action={<span className="text-sm tabular-nums text-muted-foreground">{temperature.toFixed(2)}</span>}
+        action={
+          <span className="text-sm tabular-nums text-muted-foreground">
+            {temperature.toFixed(2)}
+          </span>
+        }
       >
         <Slider
           value={[temperature]}

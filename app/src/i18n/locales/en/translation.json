@@ -1409,5 +1409,22 @@
       "migrationFailedGeneric": "Failed to migrate models",
       "migrationConnectionLost": "Lost connection during migration"
     }
+  },
+  "readAloud": {
+    "title": "Text to read aloud",
+    "description": "Pick a text, record yourself reading it, and the transcript is filled in exactly.",
+    "none": "Own text",
+    "texts": {
+      "calm": "Calm, explaining (DE)",
+      "excited": "Excited (DE)",
+      "serious": "Serious (DE)",
+      "english": "English",
+      "filipino": "Filipino"
+    },
+    "checking": "Checking that everything was read…",
+    "ok": "Everything was read. The transcript matches.",
+    "mismatch_one": "{{count}} word differs from the text. Record again for the best result.",
+    "mismatch_other": "{{count}} words differ from the text. Record again for the best result.",
+    "failed": "Could not check the recording. You can still save it."
   }
 }

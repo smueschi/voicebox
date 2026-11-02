@@ -29,6 +29,7 @@ import { useSystemAudioCapture } from '@/lib/hooks/useSystemAudioCapture';
 import { useTranscription } from '@/lib/hooks/useTranscription';
 import { usePlatform } from '@/platform/PlatformContext';
 import { AudioSampleRecording } from './AudioSampleRecording';
+import { ReadAloudPrompt } from './ReadAloudPrompt';
 import { AudioSampleSystem } from './AudioSampleSystem';
 import { AudioSampleUpload } from './AudioSampleUpload';
 
@@ -270,6 +271,10 @@ export function SampleUpload({ profileId, open, onOpenChange }: SampleUploadProp
               </TabsContent>
 
               <TabsContent value="record" className="space-y-4">
+                <ReadAloudPrompt
+                  file={selectedFile}
+                  onUseText={(text) => form.setValue('referenceText', text, { shouldValidate: true })}
+                />
                 <FormField
                   control={form.control}
                   name="file"

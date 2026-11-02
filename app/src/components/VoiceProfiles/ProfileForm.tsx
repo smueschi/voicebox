@@ -56,6 +56,7 @@ import { usePlatform } from '@/platform/PlatformContext';
 import { useServerStore } from '@/stores/serverStore';
 import { type ProfileFormDraft, useUIStore } from '@/stores/uiStore';
 import { AudioSampleRecording } from './AudioSampleRecording';
+import { ReadAloudPrompt } from './ReadAloudPrompt';
 import { AudioSampleSystem } from './AudioSampleSystem';
 import { AudioSampleUpload } from './AudioSampleUpload';
 import { SampleList } from './SampleList';
@@ -1100,6 +1101,10 @@ export function ProfileForm() {
                             </TabsContent>
 
                             <TabsContent value="record" className="space-y-4">
+                              <ReadAloudPrompt
+                                file={selectedFile}
+                                onUseText={(text) => form.setValue('referenceText', text, { shouldValidate: true })}
+                              />
                               <FormField
                                 control={form.control}
                                 name="sampleFile"

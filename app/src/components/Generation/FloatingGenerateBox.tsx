@@ -17,15 +17,20 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api/client';
 import { engineSupportsInstruct } from '@/lib/constants/engines';
-import { getLanguageOptionsForEngine, type LanguageCode } from '@/lib/constants/languages';
+import {
+  getLanguageOptionsForEngine,
+  type LanguageCode,
+  recommendedEngine,
+} from '@/lib/constants/languages';
 import { useGenerationForm } from '@/lib/hooks/useGenerationForm';
+import { useGpuQwenAvailable } from '@/lib/hooks/useGpuQwen';
 import { useProfile, useProfiles } from '@/lib/hooks/useProfiles';
 import { useStory } from '@/lib/hooks/useStories';
 import { cn } from '@/lib/utils/cn';
 import { useGenerationStore } from '@/stores/generationStore';
 import { useStoryStore } from '@/stores/storyStore';
 import { useUIStore } from '@/stores/uiStore';
-import { EngineModelSelector } from './EngineModelSelector';
+import { EngineModelSelector, GpuEngineHint } from './EngineModelSelector';
 import { ParalinguisticInput } from './ParalinguisticInput';
 
 interface FloatingGenerateBoxProps {
@@ -43,6 +48,7 @@ export function FloatingGenerateBox({
   const setSelectedEngine = useUIStore((state) => state.setSelectedEngine);
   const { data: selectedProfile } = useProfile(selectedProfileId || '');
   const { data: profiles } = useProfiles();
+  const gpuQwen = useGpuQwenAvailable();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isInstructExpanded, setIsInstructExpanded] = useState(false);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
@@ -169,13 +175,20 @@ export function FloatingGenerateBox({
       selectedProfile.voice_type !== 'preset' &&
       selectedProfile.voice_type !== 'designed'
     ) {
-      // Cloned profile with no default — ensure a compatible (non-preset) engine.
+      // Cloned profile with no default — use the recommended engine for its
+      // language instead of a preset engine or the slower CPU build of Qwen.
       // Designed profiles are excluded: they always carry a design engine and
       // would be broken by a fallback to qwen.
       const currentEngine = form.getValues('engine');
       const presetEngines = new Set(['kokoro', 'qwen_custom_voice', 'qwen_voice_design']);
-      if (currentEngine && presetEngines.has(currentEngine)) {
-        form.setValue('engine', 'qwen');
+      const best =
+        recommendedEngine(selectedProfile.language as LanguageCode, { gpuQwen }) ?? 'qwen';
+      if (
+        !currentEngine ||
+        presetEngines.has(currentEngine) ||
+        (currentEngine === 'qwen' && best === 'qwen_cpp')
+      ) {
+        form.setValue('engine', best as EngineValue);
       }
     }
     // Pre-fill effects from profile defaults
@@ -205,7 +218,7 @@ export function FloatingGenerateBox({
     if (selectedProfile && !selectedProfile.personality?.trim()) {
       form.setValue('personality', false);
     }
-  }, [selectedProfile, effectPresets, form]);
+  }, [selectedProfile, effectPresets, form, gpuQwen]);
 
   // Auto-resize textarea based on content (only when expanded)
   useEffect(() => {
@@ -643,6 +656,7 @@ export function FloatingGenerateBox({
                     </Select>
                   </FormItem>
                 </div>
+                <GpuEngineHint form={form} selectedProfile={selectedProfile} />
               </motion.div>
             </AnimatePresence>
           </form>

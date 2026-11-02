@@ -17,6 +17,7 @@ export const ALL_LANGUAGES = {
   en: 'English',
   es: 'Spanish',
   fi: 'Finnish',
+  fil: 'Filipino',
   fr: 'French',
   he: 'Hebrew',
   hi: 'Hindi',
@@ -73,8 +74,9 @@ export const ENGINE_LANGUAGES: Record<string, readonly LanguageCode[]> = {
   qwen_cpp: ['zh', 'en', 'ja', 'ko', 'de', 'fr', 'ru', 'pt', 'es', 'it'],
   qwen_voice_design: ['zh', 'en', 'ja', 'ko', 'de', 'fr', 'ru', 'pt', 'es', 'it'],
   // OmniVoice covers 600+ languages. Listed here are the ones ALL_LANGUAGES
-  // already knows -- widening that list is a separate change.
+  // knows; Filipino is only available through OmniVoice.
   omnivoice: [
+    'fil',
     'ar',
     'da',
     'de',
@@ -100,6 +102,33 @@ export const ENGINE_LANGUAGES: Record<string, readonly LanguageCode[]> = {
     'zh',
   ],
 } as const;
+
+/**
+ * Cloning engines in order of preference. The GPU build of Qwen (qwen_cpp)
+ * leads when it is installed: same model, about three times faster than the
+ * PyTorch one on a CPU-only server. OmniVoice comes last because its licence
+ * is non-commercial.
+ */
+const RECOMMENDED_CLONE_ENGINES = ['qwen_cpp', 'qwen', 'chatterbox', 'tada', 'omnivoice'] as const;
+
+/** Whether `engine` can speak `language`. Unknown engines are assumed to. */
+export function engineSupportsLanguage(engine: string, language: LanguageCode): boolean {
+  const codes = ENGINE_LANGUAGES[engine];
+  return !codes || codes.includes(language);
+}
+
+/**
+ * Best cloning engine for `language`, or undefined when none speaks it.
+ * `gpuQwen` says whether qwen_cpp is installed and its model downloaded.
+ */
+export function recommendedEngine(
+  language: LanguageCode,
+  { gpuQwen = false }: { gpuQwen?: boolean } = {},
+): string | undefined {
+  return RECOMMENDED_CLONE_ENGINES.find(
+    (engine) => (gpuQwen || engine !== 'qwen_cpp') && engineSupportsLanguage(engine, language),
+  );
+}
 
 /** Helper: get language options for a given engine. */
 export function getLanguageOptionsForEngine(engine: string) {

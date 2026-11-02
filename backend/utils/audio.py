@@ -18,6 +18,13 @@ REFERENCE_SILENCE_DBFS = -55.0
 # Rumble and mains-hum high-pass. 60 Hz keeps low male fundamentals (~85 Hz).
 REFERENCE_HIGHPASS_HZ = 60.0
 
+# Upload extensions kept on the temp file. librosa picks its decoder from the
+# extension; video containers decode through audioread/ffmpeg.
+UPLOAD_AUDIO_EXTS = {
+    ".wav", ".mp3", ".m4a", ".ogg", ".flac", ".aac", ".webm", ".opus",
+    ".mp4", ".m4v", ".mov", ".mkv", ".wma", ".amr",
+}
+
 
 def normalize_audio(
     audio: np.ndarray,

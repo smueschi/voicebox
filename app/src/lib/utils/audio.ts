@@ -94,6 +94,23 @@ export async function convertToWav(audioBlob: Blob): Promise<Blob> {
 }
 
 /**
+ * Cut `start`..`end` seconds out of a decoded buffer and encode it as WAV.
+ */
+export function encodeWavRange(buffer: AudioBuffer, start: number, end: number): Blob {
+  const from = Math.max(0, Math.floor(start * buffer.sampleRate));
+  const to = Math.min(buffer.length, Math.ceil(end * buffer.sampleRate));
+  const slice = new AudioBuffer({
+    length: Math.max(1, to - from),
+    numberOfChannels: buffer.numberOfChannels,
+    sampleRate: buffer.sampleRate,
+  });
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    slice.copyToChannel(buffer.getChannelData(channel).subarray(from, to), channel);
+  }
+  return audioBufferToWav(slice);
+}
+
+/**
  * Convert AudioBuffer to WAV blob.
  */
 function audioBufferToWav(buffer: AudioBuffer): Blob {

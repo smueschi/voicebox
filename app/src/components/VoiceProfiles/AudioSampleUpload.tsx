@@ -1,4 +1,4 @@
-import { Mic, Pause, Play, Upload } from 'lucide-react';
+import { Loader2, Mic, Pause, Play, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,8 @@ interface AudioSampleUploadProps {
   onPlayPause: () => void;
   isPlaying: boolean;
   isValidating?: boolean;
+  /** The server is turning a format the browser can't read into WAV. */
+  isConverting?: boolean;
   isTranscribing?: boolean;
   isDisabled?: boolean;
   fieldName: string;
@@ -23,6 +25,7 @@ export function AudioSampleUpload({
   onPlayPause,
   isPlaying,
   isValidating = false,
+  isConverting = false,
   isTranscribing = false,
   isDisabled = false,
   fieldName,
@@ -37,7 +40,7 @@ export function AudioSampleUpload({
         <div className="flex flex-col gap-2">
           <input
             type="file"
-            accept="audio/*"
+            accept="audio/*,video/*"
             name={fieldName}
             ref={fileInputRef}
             onChange={(e) => {
@@ -65,7 +68,7 @@ export function AudioSampleUpload({
               e.preventDefault();
               setIsDragging(false);
               const droppedFile = e.dataTransfer.files?.[0];
-              if (droppedFile?.type.startsWith('audio/')) {
+              if (droppedFile?.type.startsWith('audio/') || droppedFile?.type.startsWith('video/')) {
                 onFileChange(droppedFile);
               }
             }}
@@ -107,6 +110,12 @@ export function AudioSampleUpload({
                 <p className="text-sm text-muted-foreground text-center">
                   {t('audioSample.fileLabel', { name: file.name })}
                 </p>
+                {isConverting && (
+                  <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {t('audioSample.converting')}
+                  </p>
+                )}
                 <div className="flex gap-2">
                   <Button
                     type="button"

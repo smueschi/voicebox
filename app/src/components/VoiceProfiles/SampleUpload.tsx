@@ -24,6 +24,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { useAudioPlayer } from '@/lib/hooks/useAudioPlayer';
 import { useAudioRecording } from '@/lib/hooks/useAudioRecording';
+import type { LanguageCode } from '@/lib/constants/languages';
 import { useAddSample, useProfile } from '@/lib/hooks/useProfiles';
 import { useSystemAudioCapture } from '@/lib/hooks/useSystemAudioCapture';
 import { useTranscription } from '@/lib/hooks/useTranscription';
@@ -273,6 +274,7 @@ export function SampleUpload({ profileId, open, onOpenChange }: SampleUploadProp
               <TabsContent value="record" className="space-y-4">
                 <ReadAloudPrompt
                   file={selectedFile}
+                  language={(profile?.language ?? 'en') as LanguageCode}
                   onUseText={(text) => form.setValue('referenceText', text, { shouldValidate: true })}
                 />
                 <FormField

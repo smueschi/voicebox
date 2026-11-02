@@ -158,9 +158,10 @@ async def add_profile_sample(
     db: Session = Depends(get_db),
 ):
     """Add a sample to a voice profile."""
-    _allowed_audio_exts = {".wav", ".mp3", ".m4a", ".ogg", ".flac", ".aac", ".webm", ".opus"}
+    from ..utils.audio import UPLOAD_AUDIO_EXTS
+
     _uploaded_ext = Path(file.filename or "").suffix.lower()
-    file_suffix = _uploaded_ext if _uploaded_ext in _allowed_audio_exts else ".wav"
+    file_suffix = _uploaded_ext if _uploaded_ext in UPLOAD_AUDIO_EXTS else ".wav"
 
     with tempfile.NamedTemporaryFile(suffix=file_suffix, delete=False) as tmp:
         total_size = 0

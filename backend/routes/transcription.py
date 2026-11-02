@@ -4,9 +4,11 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy.orm import Session
 
 from .. import models
+from ..database import get_db
 from ..services import transcribe
 from ..services.task_queue import create_background_task
 from ..utils.tasks import get_task_manager
@@ -15,20 +17,29 @@ router = APIRouter()
 
 UPLOAD_CHUNK_SIZE = 1024 * 1024  # 1MB
 
-# Same set profiles.py accepts for voice samples. librosa picks its decoder from the
-# file extension, so the temp file has to keep the uploaded one.
-ALLOWED_AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".ogg", ".flac", ".aac", ".webm", ".opus"}
-
 
 @router.post("/transcribe", response_model=models.TranscriptionResponse)
 async def transcribe_audio(
     file: UploadFile = File(...),
     language: str | None = Form(None),
     model: str | None = Form(None),
+    db: Session = Depends(get_db),
 ):
     """Transcribe audio file to text."""
+    from ..services.settings import get_capture_settings
+    from ..utils.audio import UPLOAD_AUDIO_EXTS
+
+    # Whisper knows Filipino as Tagalog ("tl"); Voicebox uses ISO "fil".
+    if language == "fil":
+        language = "tl"
+
+    if not model:
+        # Without an explicit model, use the one chosen in settings instead of
+        # the backend's default ("base"), which is often not downloaded.
+        model = get_capture_settings(db).stt_model
+
     uploaded_ext = Path(file.filename or "").suffix.lower()
-    file_suffix = uploaded_ext if uploaded_ext in ALLOWED_AUDIO_EXTS else ".wav"
+    file_suffix = uploaded_ext if uploaded_ext in UPLOAD_AUDIO_EXTS else ".wav"
 
     with tempfile.NamedTemporaryFile(suffix=file_suffix, delete=False) as tmp:
         while chunk := await file.read(UPLOAD_CHUNK_SIZE):

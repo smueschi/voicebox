@@ -49,6 +49,7 @@ export const READ_ALOUD_TEXTS: ReadAloudText[] = [
   },
   {
     id: 'filipino',
+    language: 'fil',
     text:
       'Magandang araw sa inyong lahat! Ngayon, pag-uusapan natin kung paano ito gumagana. ' +
       'Una, titingnan natin ang mga pangunahing bagay, at pagkatapos ay magbibigay ako ng isang ' +

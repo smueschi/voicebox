@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
+import { Button } from '@/components/ui/button';
 import { FormControl } from '@/components/ui/form';
 import {
   Select,
@@ -9,8 +11,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { VoiceProfileResponse } from '@/lib/api/types';
-import { getLanguageOptionsForEngine } from '@/lib/constants/languages';
+import { engineBestFor } from '@/lib/constants/engineGuide';
+import { getLanguageOptionsForEngine, type LanguageCode } from '@/lib/constants/languages';
 import type { GenerationFormValues } from '@/lib/hooks/useGenerationForm';
+import { useGpuQwenAvailable } from '@/lib/hooks/useGpuQwen';
+import { useUpdateProfile } from '@/lib/hooks/useProfiles';
 
 /**
  * Engine/model options and their display metadata.
@@ -32,19 +37,6 @@ const ENGINE_OPTIONS = [
   { value: 'kokoro', label: 'Kokoro 82M', engine: 'kokoro' },
   { value: 'omnivoice', label: 'OmniVoice (non-commercial)', engine: 'omnivoice' },
 ] as const;
-
-const ENGINE_DESCRIPTIONS: Record<string, string> = {
-  qwen: 'Multi-language, two sizes',
-  qwen_cpp: 'Qwen3-TTS on any GPU via Vulkan/Metal (qwentts.cpp)',
-  qwen_custom_voice: '9 preset voices, instruct control',
-  qwen_voice_design: 'Voices described in plain language',
-  luxtts: 'Fast, English-focused',
-  chatterbox: '23 languages, incl. Hebrew',
-  chatterbox_turbo: 'English, [laugh] [cough] tags',
-  tada: 'HumeAI, 700s+ coherent audio',
-  kokoro: '82M params, CPU realtime, 8 langs',
-  omnivoice: '23 languages, voice design. CC-BY-NC weights: non-commercial use only',
-};
 
 /** Engines that only support English and should force language to 'en' on select. */
 const ENGLISH_ONLY_ENGINES = new Set(['luxtts', 'chatterbox_turbo']);
@@ -169,7 +161,12 @@ export function EngineModelSelector({ form, compact, selectedProfile }: EngineMo
       </FormControl>
       <SelectContent side={compact ? 'top' : undefined}>
         {availableOptions.map((opt) => (
-          <SelectItem key={opt.value} value={opt.value} className={itemClass}>
+          <SelectItem
+            key={opt.value}
+            value={opt.value}
+            className={itemClass}
+            description={engineBestFor(opt.engine)}
+          >
             {opt.label}
           </SelectItem>
         ))}
@@ -178,9 +175,65 @@ export function EngineModelSelector({ form, compact, selectedProfile }: EngineMo
   );
 }
 
-/** Returns a human-readable description for the currently selected engine. */
+interface GpuEngineHintProps {
+  form: UseFormReturn<GenerationFormValues>;
+  selectedProfile?: VoiceProfileResponse | null;
+}
+
+/**
+ * Shown while the CPU build of Qwen is selected but the GPU build (qwen_cpp)
+ * is installed: same model, about three times faster here.
+ */
+export function GpuEngineHint({ form, selectedProfile }: GpuEngineHintProps) {
+  const { t } = useTranslation();
+  const gpuQwen = useGpuQwenAvailable();
+  const updateProfile = useUpdateProfile();
+  const engine = form.watch('engine') || 'qwen';
+  if (!gpuQwen || engine !== 'qwen') return null;
+
+  const switchToGpu = () => applyEngineSelection(form, `qwen_cpp:${form.getValues('modelSize') || '1.7B'}`);
+  const canSaveToProfile =
+    selectedProfile &&
+    (selectedProfile.voice_type ?? 'cloned') === 'cloned' &&
+    selectedProfile.default_engine !== 'qwen_cpp';
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-accent/30 bg-accent/5 px-3 py-1.5 text-xs">
+      <span className="text-muted-foreground">{t('generation.gpuHint.text')}</span>
+      <Button type="button" size="sm" variant="secondary" className="h-6 text-xs" onClick={switchToGpu}>
+        {t('generation.gpuHint.useNow')}
+      </Button>
+      {canSaveToProfile && (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-6 text-xs"
+          disabled={updateProfile.isPending}
+          onClick={async () => {
+            await updateProfile.mutateAsync({
+              profileId: selectedProfile.id,
+              data: {
+                name: selectedProfile.name,
+                description: selectedProfile.description,
+                language: selectedProfile.language as LanguageCode,
+                default_engine: 'qwen_cpp',
+                personality: selectedProfile.personality ?? undefined,
+              },
+            });
+            switchToGpu();
+          }}
+        >
+          {t('generation.gpuHint.saveToProfile')}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** Returns what the engine is best at, for hints next to the engine picker. */
 export function getEngineDescription(engine: string): string {
-  return ENGINE_DESCRIPTIONS[engine] ?? '';
+  return engineBestFor(engine);
 }
 
 /**

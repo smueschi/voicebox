@@ -327,6 +327,12 @@ def build_server(cuda=False, rocm=False):
             "transformers.models.dac",
             "--collect-submodules",
             "transformers.models.hubert",
+            # Transcription (PyTorch backend) imports WhisperProcessor and
+            # WhisperForConditionalGeneration, which transformers also loads
+            # lazily; without this the frozen server fails with "Could not
+            # import module 'WhisperProcessor'".
+            "--collect-submodules",
+            "transformers.models.whisper",
             # Reference-audio preprocessing (silence trimming) in
             # omnivoice.utils.audio.
             "--hidden-import",
@@ -487,6 +493,14 @@ def build_server(cuda=False, rocm=False):
         ]
         for pkg in nvidia_packages:
             args.extend(["--exclude-module", pkg])
+
+    # No engine uses torchvision, but transformers imports it for image
+    # processing whenever it is installed. In the bundle its native ops
+    # (_C_stable.pyd) are missing, so that import fails with "operator
+    # torchvision::nms does not exist" and takes AutoProcessor (Qwen) and
+    # WhisperProcessor (transcription) down with it. Left out, transformers
+    # sees it as not installed and skips it.
+    args.extend(["--exclude-module", "torchvision"])
 
     # Add MLX-specific imports if building on Apple Silicon (never for GPU builds)
     if is_apple_silicon() and not cuda and not rocm:

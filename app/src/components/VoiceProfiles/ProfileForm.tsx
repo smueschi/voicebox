@@ -37,8 +37,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { apiClient } from '@/lib/api/client';
 import type { EffectConfig, PresetVoice, VoiceType } from '@/lib/api/types';
-import { LANGUAGE_CODES, LANGUAGE_OPTIONS, type LanguageCode } from '@/lib/constants/languages';
+import {
+  engineSupportsLanguage,
+  LANGUAGE_CODES,
+  LANGUAGE_OPTIONS,
+  type LanguageCode,
+  recommendedEngine,
+} from '@/lib/constants/languages';
+import { ENGINE_GUIDE, engineBestFor } from '@/lib/constants/engineGuide';
 import { useAudioPlayer } from '@/lib/hooks/useAudioPlayer';
+import { useGpuQwenAvailable } from '@/lib/hooks/useGpuQwen';
 import { useAudioRecording } from '@/lib/hooks/useAudioRecording';
 import {
   useAddSample,
@@ -59,6 +67,7 @@ import { AudioSampleRecording } from './AudioSampleRecording';
 import { ReadAloudPrompt } from './ReadAloudPrompt';
 import { AudioSampleSystem } from './AudioSampleSystem';
 import { AudioSampleUpload } from './AudioSampleUpload';
+import { ClipPicker } from './ClipPicker';
 import { SampleList } from './SampleList';
 
 const MAX_AUDIO_DURATION_SECONDS = 30;
@@ -68,6 +77,7 @@ const PRESET_ONLY_ENGINES = new Set(['kokoro', 'qwen_custom_voice', 'qwen_voice_
 /** The engine a designed profile is created against. */
 const DESIGN_ENGINE = 'qwen_voice_design';
 const DEFAULT_ENGINE_OPTIONS = [
+  { value: 'qwen_cpp', label: 'Qwen TTS (GPU)' },
   { value: 'qwen', label: 'Qwen3-TTS' },
   { value: 'qwen_custom_voice', label: 'Qwen CustomVoice' },
   { value: 'qwen_voice_design', label: 'Qwen VoiceDesign' },
@@ -77,7 +87,6 @@ const DEFAULT_ENGINE_OPTIONS = [
   { value: 'tada', label: 'TADA' },
   { value: 'kokoro', label: 'Kokoro 82M' },
   { value: 'omnivoice', label: 'OmniVoice (non-commercial)' },
-  { value: 'qwen_cpp', label: 'Qwen TTS (GPU)' },
 ] as const;
 
 function makeProfileSchema(t: (key: string) => string) {
@@ -125,6 +134,16 @@ async function fileToBase64(file: File): Promise<string> {
   });
 }
 
+/** Have the server decode an upload the browser can't read; remembers the result in `converted`. */
+async function convertUpload(file: File, converted: WeakSet<File>): Promise<File> {
+  const wav = await apiClient.convertAudio(file);
+  const result = new File([wav], `${file.name.replace(/(\.[^.]+)+$/, '')}.wav`, {
+    type: 'audio/wav',
+  });
+  converted.add(result);
+  return result;
+}
+
 // Helper to convert base64 to File
 function base64ToFile(base64: string, fileName: string, fileType: string): File {
   const arr = base64.split(',');
@@ -160,6 +179,12 @@ export function ProfileForm() {
   const [sampleMode, setSampleMode] = useState<'upload' | 'record' | 'system'>('record');
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
   const [isValidatingAudio, setIsValidatingAudio] = useState(false);
+  /** An upload over the limit; the clip picker cuts the sample out of it. */
+  const [longSourceFile, setLongSourceFile] = useState<File | null>(null);
+  const clipFilesRef = useRef(new WeakSet<File>());
+  /** WAVs the server made from uploads the browser couldn't decode; never converted twice. */
+  const convertedFilesRef = useRef(new WeakSet<File>());
+  const [isConvertingAudio, setIsConvertingAudio] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [selectedPresetEngine, setSelectedPresetEngine] = useState<string>('kokoro');
   const [selectedPresetVoiceId, setSelectedPresetVoiceId] = useState<string>('');
@@ -170,6 +195,8 @@ export function ProfileForm() {
   const [profileEffectsChain, setProfileEffectsChain] = useState<EffectConfig[]>([]);
   const [effectsDirty, setEffectsDirty] = useState(false);
   const [defaultEngine, setDefaultEngine] = useState<string>('');
+  /** Set once the user picks an engine, so the language-based suggestion stops overriding it. */
+  const [engineTouched, setEngineTouched] = useState(false);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(makeProfileSchema(t)),
@@ -186,50 +213,83 @@ export function ProfileForm() {
 
   const selectedFile = form.watch('sampleFile');
   const selectedAvatarFile = form.watch('avatarFile');
+  const watchedLanguage = form.watch('language');
+  const gpuQwen = useGpuQwenAvailable();
+  const recommended = recommendedEngine(watchedLanguage, { gpuQwen });
+  const recommendedLabel = DEFAULT_ENGINE_OPTIONS.find((o) => o.value === recommended)?.label;
+  const languageLabel =
+    LANGUAGE_OPTIONS.find((o) => o.value === watchedLanguage)?.label ?? watchedLanguage;
 
   // Validate audio duration when file is selected
   useEffect(() => {
     if (selectedFile && selectedFile instanceof File) {
+      let cancelled = false;
       setIsValidatingAudio(true);
       getAudioDuration(selectedFile as File & { recordedDuration?: number })
         .then((duration) => {
+          if (cancelled) return;
           setAudioDuration(duration);
           if (duration > MAX_AUDIO_DURATION_SECONDS) {
-            form.setError('sampleFile', {
-              type: 'manual',
-              message: t('profileForm.validation.audioTooLong', {
-                duration: formatAudioDuration(duration),
-                max: formatAudioDuration(MAX_AUDIO_DURATION_SECONDS),
-              }),
-            });
-          } else {
-            form.clearErrors('sampleFile');
+            // Too long to use whole: offer the clip picker instead of an error.
+            setLongSourceFile(selectedFile);
+          } else if (!clipFilesRef.current.has(selectedFile)) {
+            setLongSourceFile(null);
           }
+          form.clearErrors('sampleFile');
         })
-        .catch((error) => {
+        .catch(async (error) => {
+          if (cancelled) return;
           console.error('Failed to get audio duration:', error);
           setAudioDuration(null);
           const isRecordedFile =
             selectedFile.name.startsWith('recording-') ||
             selectedFile.name.startsWith('system-audio-');
-          if (!isRecordedFile) {
-            form.setError('sampleFile', {
-              type: 'manual',
-              message: t('profileForm.validation.audioFailed'),
-            });
-          } else {
+          if (isRecordedFile) {
             // Clear any existing errors for recorded files
             form.clearErrors('sampleFile');
+            return;
           }
+          // The browser can't read this format: let the server convert it to WAV
+          // once, then validate the result like any other upload.
+          if (!convertedFilesRef.current.has(selectedFile)) {
+            setIsConvertingAudio(true);
+            try {
+              const converted = await convertUpload(selectedFile, convertedFilesRef.current);
+              if (cancelled) return;
+              form.setValue('sampleFile', converted, { shouldValidate: true });
+              return;
+            } catch (conversionError) {
+              console.error('Server conversion failed:', conversionError);
+            } finally {
+              setIsConvertingAudio(false);
+            }
+          }
+          if (cancelled) return;
+          form.setError('sampleFile', {
+            type: 'manual',
+            message: t('profileForm.validation.audioFailed'),
+          });
         })
         .finally(() => {
-          setIsValidatingAudio(false);
+          if (!cancelled) setIsValidatingAudio(false);
         });
+      return () => {
+        cancelled = true;
+      };
     } else {
       setAudioDuration(null);
+      setLongSourceFile(null);
       form.clearErrors('sampleFile');
     }
   }, [selectedFile, form, t]);
+
+  function handleClipChosen(clip: File) {
+    clipFilesRef.current.add(clip);
+    cleanupAudio();
+    form.setValue('sampleFile', clip, { shouldValidate: true });
+    // The old transcript belongs to other audio.
+    form.setValue('referenceText', '');
+  }
 
   const {
     isRecording,
@@ -393,6 +453,7 @@ export function ProfileForm() {
       });
       setSampleMode('record');
       setAvatarPreview(null);
+      setEngineTouched(false);
     }
   }, [editingProfile, profileFormDraft, open, form]);
 
@@ -404,6 +465,14 @@ export function ProfileForm() {
       setDefaultEngine('');
     }
   }, [availableDefaultEngines, defaultEngine]);
+
+  // New cloned profiles start on the engine recommended for their language and
+  // follow language changes until the user picks an engine themselves.
+  useEffect(() => {
+    if (isCreating && voiceSource === 'clone' && !engineTouched) {
+      setDefaultEngine(recommended ?? '');
+    }
+  }, [isCreating, voiceSource, engineTouched, recommended]);
 
   useEffect(() => {
     if (!selectedPresetVoiceId) {
@@ -1089,6 +1158,7 @@ export function ProfileForm() {
                                     onPlayPause={handlePlayPause}
                                     isPlaying={isPlaying}
                                     isValidating={isValidatingAudio}
+                                    isConverting={isConvertingAudio}
                                     isTranscribing={transcribe.isPending}
                                     isDisabled={
                                       audioDuration !== null &&
@@ -1098,12 +1168,18 @@ export function ProfileForm() {
                                   />
                                 )}
                               />
+                              {longSourceFile && (
+                                <ClipPicker source={longSourceFile} onClip={handleClipChosen} />
+                              )}
                             </TabsContent>
 
                             <TabsContent value="record" className="space-y-4">
                               <ReadAloudPrompt
                                 file={selectedFile}
-                                onUseText={(text) => form.setValue('referenceText', text, { shouldValidate: true })}
+                                language={form.watch('language')}
+                                onUseText={(text) =>
+                                  form.setValue('referenceText', text, { shouldValidate: true })
+                                }
                               />
                               <FormField
                                 control={form.control}
@@ -1215,9 +1291,7 @@ export function ProfileForm() {
                           <div className="text-sm font-medium text-muted-foreground">
                             {t('profileForm.design.badge')}
                           </div>
-                          <p className="text-sm leading-relaxed">
-                            {editingProfile.design_prompt}
-                          </p>
+                          <p className="text-sm leading-relaxed">{editingProfile.design_prompt}</p>
                           <Badge variant="secondary" className="text-xs">
                             {editingProfile.default_engine}
                           </Badge>
@@ -1332,9 +1406,7 @@ export function ProfileForm() {
                             {...field}
                           />
                         </FormControl>
-                        <FormDescription>
-                          {t('profileForm.fields.personalityHint')}
-                        </FormDescription>
+                        <FormDescription>{t('profileForm.fields.personalityHint')}</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -1371,6 +1443,7 @@ export function ProfileForm() {
                       value={defaultEngine || '_none'}
                       onValueChange={(v) => {
                         setDefaultEngine(v === '_none' ? '' : v);
+                        setEngineTouched(true);
                       }}
                       disabled={
                         voiceSource === 'builtin' ||
@@ -1388,16 +1461,87 @@ export function ProfileForm() {
                         <SelectItem value="_none">
                           {t('profileForm.fields.noPreference')}
                         </SelectItem>
-                        {availableDefaultEngines.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
+                        {availableDefaultEngines.map((option) => {
+                          const speaks = engineSupportsLanguage(option.value, watchedLanguage);
+                          return (
+                            <SelectItem
+                              key={option.value}
+                              value={option.value}
+                              // Keep a saved engine selectable so it still shows.
+                              disabled={!speaks && option.value !== defaultEngine}
+                              description={engineBestFor(option.value)}
+                            >
+                              {option.label}
+                              {option.value === recommended &&
+                                ` · ${t('profileForm.fields.engineRecommended')}`}
+                              {!speaks &&
+                                ` · ${t('profileForm.fields.engineNoLanguage', { language: languageLabel })}`}
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      {t('profileForm.fields.defaultEngineHint')}
-                    </p>
+                    {isSampleBasedProfile &&
+                    defaultEngine &&
+                    !engineSupportsLanguage(defaultEngine, watchedLanguage) ? (
+                      <p className="text-xs text-amber-600 dark:text-amber-500">
+                        {t('profileForm.fields.engineLanguageMismatch', {
+                          language: languageLabel,
+                          engine: recommendedLabel ?? '',
+                        })}
+                      </p>
+                    ) : isSampleBasedProfile && defaultEngine === 'qwen' && recommended === 'qwen_cpp' ? (
+                      <p className="text-xs text-muted-foreground">
+                        {t('profileForm.fields.engineGpuFaster')}{' '}
+                        <button
+                          type="button"
+                          className="underline underline-offset-2 hover:text-foreground"
+                          onClick={() => {
+                            setDefaultEngine('qwen_cpp');
+                            setEngineTouched(true);
+                          }}
+                        >
+                          {t('profileForm.fields.engineSwitchToGpu')}
+                        </button>
+                      </p>
+                    ) : isSampleBasedProfile && recommendedLabel ? (
+                      <p className="text-xs text-muted-foreground">
+                        {t('profileForm.fields.engineRecommendedHint', {
+                          language: languageLabel,
+                          engine: recommendedLabel,
+                        })}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {t('profileForm.fields.defaultEngineHint')}
+                      </p>
+                    )}
+                    {isSampleBasedProfile && (
+                      <details className="rounded-lg border border-border px-3 py-2 text-xs">
+                        <summary className="cursor-pointer select-none font-medium">
+                          {t('profileForm.fields.engineGuideTitle', { language: languageLabel })}
+                        </summary>
+                        <ul className="mt-2 space-y-1.5">
+                          {availableDefaultEngines
+                            .filter(
+                              (o) =>
+                                ENGINE_GUIDE[o.value]?.cloning &&
+                                (o.value !== 'qwen_cpp' || gpuQwen) &&
+                                engineSupportsLanguage(o.value, watchedLanguage),
+                            )
+                            .map((o) => (
+                              <li key={o.value}>
+                                <span className="font-medium">{o.label}</span>
+                                {o.value === recommended &&
+                                  ` · ${t('profileForm.fields.engineRecommended')}`}
+                                <span className="block text-muted-foreground">
+                                  {engineBestFor(o.value)}
+                                </span>
+                              </li>
+                            ))}
+                        </ul>
+                      </details>
+                    )}
                   </FormItem>
 
                   {editingProfileId && (

@@ -210,6 +210,26 @@ class ApiClient {
     return response.blob();
   }
 
+  /** Server-side decode for uploads the browser can't read; returns mono WAV. */
+  async convertAudio(file: File): Promise<Blob> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${this.getBaseUrl()}/audio/convert`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({
+        detail: response.statusText,
+      }));
+      throw new Error(formatErrorDetail(error.detail, `HTTP error! status: ${response.status}`));
+    }
+
+    return response.blob();
+  }
+
   async importProfile(file: File): Promise<VoiceProfileResponse> {
     const url = `${this.getBaseUrl()}/profiles/import`;
     const formData = new FormData();
@@ -432,6 +452,15 @@ class ApiClient {
         detail: response.statusText,
       }));
       throw new Error(formatErrorDetail(error.detail, `HTTP error! status: ${response.status}`));
+    }
+
+    // 202 means the Whisper model is still downloading: there is no text yet,
+    // and treating it as a result would blank the reference text.
+    if (response.status === 202) {
+      const pending = await response.json().catch(() => ({}));
+      throw new Error(
+        pending?.detail?.message ?? 'The Whisper model is downloading. Try again in a moment.',
+      );
     }
 
     return response.json();

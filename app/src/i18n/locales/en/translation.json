@@ -277,6 +277,13 @@
       "defaultEngine": "Default Engine",
       "noPreference": "No preference",
       "defaultEngineHint": "Auto-selects this engine when the profile is chosen.",
+      "engineRecommended": "recommended",
+      "engineNoLanguage": "doesn't speak {{language}}",
+      "engineRecommendedHint": "Recommended for {{language}}: {{engine}}. You can change this later under Edit profile, or per generation.",
+      "engineLanguageMismatch": "This engine doesn't speak {{language}}. Recommended: {{engine}}.",
+      "engineGpuFaster": "Qwen TTS (GPU) is the same model and about three times faster on this computer.",
+      "engineSwitchToGpu": "Switch to Qwen TTS (GPU)",
+      "engineGuideTitle": "Which engine? (for {{language}})",
       "defaultEffects": "Default Effects",
       "defaultEffectsHint": "Effects applied automatically to all new generations with this voice.",
       "personalityLabel": "Personality",
@@ -349,9 +356,10 @@
   },
   "audioSample": {
     "chooseFile": "Choose File",
-    "uploadHint": "Click to choose a file or drag and drop. Maximum duration: 30 seconds.",
+    "uploadHint": "Click to choose a file or drag and drop. Longer files: you pick a clip of up to 25 seconds.",
     "fileUploaded": "File uploaded",
     "fileLabel": "File: {{name}}",
+    "converting": "Converting to WAV…",
     "play": "Play",
     "pause": "Pause",
     "transcribe": "Transcribe",
@@ -368,6 +376,20 @@
     "stopCapture": "Stop Capture",
     "captureComplete": "Capture complete",
     "captureAgain": "Capture Again"
+  },
+  "clipPicker": {
+    "analyzing": "Looking for the best clips…",
+    "failed": "Could not read this file to cut a clip. Try converting it to WAV or MP3.",
+    "intro": "The file is {{duration}} long. Voice cloning works best with 10–25 seconds of clean speech, so pick a clip. The best one is already selected.",
+    "length": "Clip length",
+    "suggestion": "Suggestion {{n}}",
+    "custom": "Your pick",
+    "speech": "{{percent}}% speech",
+    "selected": "Selected",
+    "use": "Use",
+    "pickAt": "Use a clip starting at {{time}}",
+    "clickHint": "Click the bars to pick your own spot",
+    "transcribeHint": "Listen to the clip, then press Transcribe and check the text."
   },
   "sampleList": {
     "loading": "Loading samples…",
@@ -727,6 +749,11 @@
     "effects": {
       "none": "No effects",
       "profileDefault": "Profile default"
+    },
+    "gpuHint": {
+      "text": "Qwen3-TTS (GPU) is the same model and about three times faster on this computer.",
+      "useNow": "Use GPU",
+      "saveToProfile": "Use for this profile"
     },
     "compose": {
       "tooltip": "Compose",
@@ -1425,6 +1452,24 @@
     "ok": "Everything was read. The transcript matches.",
     "mismatch_one": "{{count}} word differs from the text. Record again for the best result.",
     "mismatch_other": "{{count}} words differ from the text. Record again for the best result.",
-    "failed": "Could not check the recording. You can still save it."
+    "failed": "Could not check the recording. You can still save it.",
+    "generated": "Made for cloning",
+    "templates": "Templates",
+    "styles": {
+      "explain": "Explainer video",
+      "sales": "Ad / sales",
+      "conversation": "Conversation",
+      "story": "Storytelling"
+    },
+    "howToRead": "How to read:",
+    "directions": {
+      "explain": "calm and clear, as if explaining something to a friend.",
+      "sales": "energetic and convincing, smile while you speak.",
+      "conversation": "relaxed and natural, like chatting with someone you know.",
+      "story": "slow and warm, with a short pause after each sentence."
+    },
+    "duration": "About {{seconds}} seconds. Covers all key sounds, a question and an exclamation.",
+    "newText": "New text",
+    "languageFallback": "Generated texts exist in German and English; this one is in English."
   }
 }

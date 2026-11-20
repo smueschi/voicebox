@@ -74,6 +74,16 @@ async def clear_failed_generations(db: Session = Depends(get_db)):
     return {"deleted": count}
 
 
+@router.post("/history/delete-batch")
+async def delete_generations(
+    request: models.DeleteGenerationsRequest,
+    db: Session = Depends(get_db),
+):
+    """Delete several generations at once. Generations still running are skipped."""
+    count = await history.delete_generations(request.ids, db)
+    return {"deleted": count}
+
+
 @router.get("/history/{generation_id}", response_model=models.HistoryResponse)
 async def get_generation(
     generation_id: str,

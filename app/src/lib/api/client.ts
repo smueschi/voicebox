@@ -353,6 +353,13 @@ class ApiClient {
     });
   }
 
+  async deleteGenerations(ids: string[]): Promise<{ deleted: number }> {
+    return this.request<{ deleted: number }>(`/history/delete-batch`, {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    });
+  }
+
   async exportGeneration(generationId: string): Promise<Blob> {
     const url = `${this.getBaseUrl()}/history/${generationId}/export`;
     const response = await fetch(url);

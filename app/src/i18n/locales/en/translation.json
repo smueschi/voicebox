@@ -701,6 +701,22 @@
       "body": "Are you sure you want to delete this generation from \"{{name}}\"? This action cannot be undone.",
       "deleting": "Deleting…"
     },
+    "selection": {
+      "select": "Select",
+      "selectAll": "Select all",
+      "count_one": "{{count}} selected",
+      "count_other": "{{count}} selected",
+      "deleteSelected": "Delete selected",
+      "done": "Done",
+      "rowLabel": "Select generation from {{name}}",
+      "dialogTitle_one": "Delete {{count}} generation?",
+      "dialogTitle_other": "Delete {{count}} generations?",
+      "dialogBody_one": "This deletes the generation and its audio. You can't undo it.",
+      "dialogBody_other": "This deletes the generations and their audio. You can't undo it.",
+      "deletedToast_one": "{{count}} generation deleted",
+      "deletedToast_other": "{{count}} generations deleted",
+      "deleteFailed": "Couldn't delete the generations"
+    },
     "clearFailedDialog": {
       "title": "Clear failed generations",
       "body_one": "This will permanently delete {{count}} failed generation from your history. This cannot be undone.",

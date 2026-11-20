@@ -277,6 +277,45 @@ async def list_generations(
     )
 
 
+IN_PROGRESS_STATUSES = ("loading_model", "generating")
+
+
+def _delete_generation_row(generation: DBGeneration, db: Session) -> None:
+    """Remove a generation's versions, audio file and row. The caller commits."""
+    _delete_generation_children(generation.id, db, commit=False)
+    if generation.audio_path:
+        audio_path = config.resolve_storage_path(generation.audio_path)
+        if audio_path is not None and audio_path.exists():
+            try:
+                audio_path.unlink()
+            except OSError:
+                # Best effort: version files are already gone, so leave a
+                # locked file behind as an orphan instead of rolling back.
+                logger.warning("Could not delete generation audio %s", audio_path)
+    db.delete(generation)
+
+
+async def delete_generations(generation_ids: list[str], db: Session) -> int:
+    """Delete the given generations in one commit; running ones are skipped.
+
+    Returns:
+        Number of generations deleted.
+    """
+    ids = list(dict.fromkeys(generation_ids))
+    if not ids:
+        return 0
+    rows = (
+        db.query(DBGeneration)
+        .filter(DBGeneration.id.in_(ids))
+        .filter(DBGeneration.status.notin_(IN_PROGRESS_STATUSES) | DBGeneration.status.is_(None))
+        .all()
+    )
+    for generation in rows:
+        _delete_generation_row(generation, db)
+    db.commit()
+    return len(rows)
+
+
 async def delete_generation(
     generation_id: str,
     db: Session,
@@ -295,24 +334,7 @@ async def delete_generation(
     if not generation:
         return False
 
-    # Delete all version files and records; the rows are committed together
-    # with the generation row below (one commit for the whole delete).
-    _delete_generation_children(generation_id, db, commit=False)
-
-    # Delete main audio file (if not already removed by version cleanup)
-    if generation.audio_path:
-        audio_path = config.resolve_storage_path(generation.audio_path)
-        if audio_path is not None and audio_path.exists():
-            try:
-                audio_path.unlink()
-            except OSError:
-                # Version files are already gone by now, so rolling back would
-                # leave rows pointing at missing audio. Mirror the sweep below:
-                # keep going and leave the locked file as an orphan instead.
-                logger.warning("Could not delete generation audio %s", audio_path)
-
-    # Delete from database
-    db.delete(generation)
+    _delete_generation_row(generation, db)
     db.commit()
     
     return True
@@ -330,24 +352,9 @@ async def delete_failed_generations(db: Session) -> int:
         Number of generations deleted.
     """
     failed = db.query(DBGeneration).filter(DBGeneration.status == "failed").all()
-    count = 0
     for generation in failed:
-        # Clean up version files/rows first; one commit at the end.
-        _delete_generation_children(generation.id, db, commit=False)
-
-        # Remove the main audio file if it somehow made it to disk.
-        if generation.audio_path:
-            audio_path = config.resolve_storage_path(generation.audio_path)
-            if audio_path is not None and audio_path.exists():
-                try:
-                    audio_path.unlink()
-                except OSError:
-                    # Best-effort cleanup — don't abort the whole sweep
-                    # if a single file can't be removed.
-                    logger.warning("Could not delete generation audio %s", audio_path)
-
-        db.delete(generation)
-        count += 1
+        _delete_generation_row(generation, db)
+    count = len(failed)
 
     db.commit()
     return count

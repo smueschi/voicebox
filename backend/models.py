@@ -161,6 +161,12 @@ class HistoryResponse(BaseModel):
         from_attributes = True
 
 
+class DeleteGenerationsRequest(BaseModel):
+    """IDs of the generations to delete in one go."""
+
+    ids: List[str] = Field(..., max_length=1000)
+
+
 class HistoryListResponse(BaseModel):
     """Response model for history list."""
 

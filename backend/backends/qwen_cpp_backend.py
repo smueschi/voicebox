@@ -229,9 +229,13 @@ def _kill_leftover(exe: Path) -> None:
         return
     try:
         if sys.platform == "win32":
-            out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
-                                 capture_output=True, text=True, timeout=10,
+            # Read raw bytes: tasklist answers in the OEM code page (e.g. "ausgeführt"
+            # as CP850 0x81), which text=True decodes with cp1252 and fails on,
+            # leaving stdout as None.
+            raw = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                                 capture_output=True, timeout=10,
                                  creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+            out = (raw or b"").decode("oem", errors="replace")
             if exe.name.lower() in out.lower():
                 subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, timeout=10,
                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
@@ -240,9 +244,13 @@ def _kill_leftover(exe: Path) -> None:
             cmdline = Path(f"/proc/{pid}/cmdline")
             if cmdline.exists() and exe.name in cmdline.read_text(errors="replace"):
                 os.kill(pid, 9)
-    except (OSError, subprocess.SubprocessError) as e:
+    except Exception as e:  # cleanup must never block a generation
         logger.warning("Could not stop leftover tts-server %d: %s", pid, e)
-    pid_file.unlink(missing_ok=True)
+    finally:
+        try:
+            pid_file.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 class QwenCppTTSBackend:

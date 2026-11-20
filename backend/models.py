@@ -415,6 +415,16 @@ class QwenCppSettingsUpdate(BaseModel):
     subtalker_top_k: Optional[int] = Field(default=None, ge=0, le=1000)
 
 
+class OmniVoiceSettings(BaseModel):
+    """Speed mode for OmniVoice. Stored in <data dir>/omnivoice.json."""
+
+    mode: str = Field(default="quality", pattern="^(quality|fast)$")
+
+
+class OmniVoiceSettingsUpdate(BaseModel):
+    mode: Optional[str] = Field(default=None, pattern="^(quality|fast)$")
+
+
 class MCPClientBindingResponse(BaseModel):
     """Per-MCP-client voice binding — what voice / engine the server should
     use when a given client_id calls voicebox_speak without args, plus an

@@ -10,6 +10,7 @@ import { useServerStore } from '@/stores/serverStore';
 import { SettingRow, SettingSection } from './SettingRow';
 import {
   AudioFinishSection,
+  OmniVoiceSection,
   QualityCheckSection,
   QwenCppSection,
   TextPrepSection,
@@ -153,6 +154,7 @@ export function GenerationPage() {
       </SettingSection>
 
       <QwenCppSection />
+      <OmniVoiceSection />
 
       <AudioFinishSection />
       <QualityCheckSection />

@@ -247,6 +247,32 @@ def test_attribute_name_derivation(token, expected):
     assert compat._attribute_name(token) == expected
 
 
+# ── rope_parameters (5.x) on Qwen3Config ──────────────────────────────
+
+
+def test_rope_parameters_become_rope_theta():
+    """OmniVoice's backbone is trained with theta 1e6; 4.57 alone would use 1e4.
+
+    Regression: cloning produced gibberish in every language because the
+    5.x-format config was read with the default theta.
+    """
+    from transformers import Qwen3Config
+
+    compat.patch_qwen3_rope_parameters()
+    cfg = Qwen3Config(rope_parameters={"rope_theta": 1000000, "rope_type": "default"})
+    assert cfg.rope_theta == 1000000
+    assert cfg.rope_scaling is None
+
+
+def test_rope_patch_leaves_4x_configs_alone():
+    from transformers import Qwen3Config
+
+    compat.patch_qwen3_rope_parameters()
+    assert Qwen3Config().rope_theta == 10000.0
+    assert Qwen3Config(rope_theta=500000.0).rope_theta == 500000.0
+    assert compat.patch_qwen3_rope_parameters() is False
+
+
 # ── engine wiring ─────────────────────────────────────────────────────
 
 

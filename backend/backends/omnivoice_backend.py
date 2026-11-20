@@ -59,9 +59,59 @@ LANGUAGE_CODE_OVERRIDES = {"ar": "arb"}
 # the loaded model when available; this is the fallback.
 DEFAULT_SAMPLE_RATE = 24000
 
-# Diffusion steps. Upstream defaults to 32; 16 roughly halves latency at some
-# quality cost.
-NUM_DIFFUSION_STEPS = 32
+# Speed mode, stored in <data dir>/omnivoice.json as {"mode": ...}.
+#   quality: upstream's 32 diffusion steps, fp32 on CPU.
+#   fast:    16 steps, bf16 on AVX-512 CPUs. Measured 2026-11-02 on a Ryzen AI
+#            9 365 (10 s Filipino clone): 75 s instead of 231 s, same words
+#            per Whisper and no difference by ear on laptop speakers.
+DEFAULT_MODE = "quality"
+DIFFUSION_STEPS = {"quality": 32, "fast": 16}
+
+
+def load_settings() -> dict:
+    """``{"mode": "quality" | "fast"}``, defaults merged with ``<data dir>/omnivoice.json``."""
+    import json
+
+    from ..config import get_data_dir
+
+    settings = {"mode": DEFAULT_MODE}
+    path = get_data_dir() / "omnivoice.json"
+    if path.exists():
+        try:
+            settings.update(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, ValueError) as e:
+            logger.warning("Ignoring unreadable %s: %s", path, e)
+    if settings["mode"] not in DIFFUSION_STEPS:
+        settings["mode"] = DEFAULT_MODE
+    return settings
+
+
+def save_settings(patch: dict) -> dict:
+    import json
+
+    from ..config import get_data_dir
+
+    current = load_settings()
+    if patch.get("mode") in DIFFUSION_STEPS:
+        current["mode"] = patch["mode"]
+    (get_data_dir() / "omnivoice.json").write_text(json.dumps(current, indent=2), encoding="utf-8")
+    return current
+
+
+def _cpu_dtype(mode: str):
+    """bf16 in fast mode on CPUs with native AVX-512, else fp32.
+
+    Without AVX-512, PyTorch emulates bf16 matmuls and gets slower than fp32.
+    """
+    import torch
+
+    if mode != "fast":
+        return torch.float32
+    try:
+        capability = torch.backends.cpu.get_cpu_capability()
+    except Exception:
+        return torch.float32
+    return torch.bfloat16 if "AVX512" in capability else torch.float32
 
 _VOICE_CLONE_PROMPT_FORMAT_VERSION = 1
 
@@ -103,6 +153,7 @@ class OmniVoiceBackend:
         self.model = None
         self.model_size = "default"  # OmniVoice ships a single checkpoint
         self._device = None
+        self._loaded_dtype = None
         self._asr_loaded = False
         self._model_load_lock = asyncio.Lock()
         # A threading lock, not an asyncio one: _ensure_asr runs inside the
@@ -159,13 +210,14 @@ class OmniVoiceBackend:
             from omnivoice import OmniVoice
 
             device = self.device
-            # fp16 on accelerators, fp32 on CPU and MPS. MPS fp16 underflows
-            # in the diffusion loop; CPU fp16 is slower than fp32.
-            dtype = (
-                torch.float16
-                if device in ("cuda", "xpu")
-                else torch.float32
-            )
+            # fp16 on accelerators, bf16 on AVX-512 CPUs, else fp32. MPS fp16
+            # underflows in the diffusion loop; CPU fp16 is slower than fp32.
+            if device in ("cuda", "xpu"):
+                dtype = torch.float16
+            elif device == "cpu":
+                dtype = _cpu_dtype(load_settings()["mode"])
+            else:
+                dtype = torch.float32
 
             logger.info("Loading OmniVoice on %s (%s)...", device, dtype)
 
@@ -174,6 +226,7 @@ class OmniVoiceBackend:
                 device_map=device,
                 dtype=dtype,
             )
+            self._loaded_dtype = dtype
 
         logger.info("OmniVoice loaded successfully")
 
@@ -183,6 +236,7 @@ class OmniVoiceBackend:
             del self.model
             self.model = None
             self._device = None
+            self._loaded_dtype = None
             self._asr_loaded = False
 
             _clear_codec_layer_cache()
@@ -315,7 +369,7 @@ class OmniVoiceBackend:
             kwargs: dict[str, Any] = {
                 "text": text,
                 "language": resolved_language,
-                "num_step": NUM_DIFFUSION_STEPS,
+                "num_step": DIFFUSION_STEPS[load_settings()["mode"]],
             }
             if clone_prompt is not None:
                 kwargs["voice_clone_prompt"] = clone_prompt

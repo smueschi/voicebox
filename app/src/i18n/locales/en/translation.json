@@ -1348,6 +1348,16 @@
         "BF16": "BF16 (full)",
         "F32": "F32 (full)"
       }
+    },
+    "omnivoice": {
+      "title": "OmniVoice",
+      "description": "Speed of the OmniVoice engine (rare languages such as Filipino).",
+      "mode": {
+        "title": "Speed",
+        "description": "Fast uses half the refinement steps and, on CPUs with AVX-512, a lighter number format: about 3× faster. In our tests the words were identical and we heard no difference. Changing reloads the model.",
+        "quality": "Thorough (32 steps)",
+        "fast": "Fast (16 steps)"
+      }
     }
   },
   "models": {

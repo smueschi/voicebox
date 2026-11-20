@@ -623,3 +623,7 @@ export interface QwenCppSettings {
   server_found: boolean;
   active_device: string | null;
 }
+
+export interface OmniVoiceSettings {
+  mode: 'quality' | 'fast';
+}

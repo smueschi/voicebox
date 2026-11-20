@@ -15,6 +15,7 @@ import { Toggle } from '@/components/ui/toggle';
 import { apiClient } from '@/lib/api/client';
 import type {
   AudioFinishSettings,
+  OmniVoiceSettings,
   QualityCheckSettings,
   QwenCppSettings,
   TextPrepSettings,
@@ -25,6 +26,7 @@ const TEXT_PREP_KEY = ['settings', 'text-prep'];
 const QWEN_CPP_KEY = ['settings', 'qwen-cpp'];
 const QUALITY_CHECK_KEY = ['settings', 'quality-check'];
 const AUDIO_FINISH_KEY = ['settings', 'audio-finish'];
+const OMNIVOICE_KEY = ['settings', 'omnivoice'];
 
 /** Spoken-form text preparation: numbers, currencies, pronunciation dictionary. */
 export function TextPrepSection() {
@@ -409,6 +411,51 @@ export function QwenCppSection() {
         title={t('settings.qwenCpp.codec.title')}
         description={t('settings.qwenCpp.codec.description')}
         action={precisionSelect('codec_precision')}
+      />
+    </SettingSection>
+  );
+}
+
+const OMNIVOICE_MODES: OmniVoiceSettings['mode'][] = ['quality', 'fast'];
+
+/** Speed mode for OmniVoice: diffusion steps and CPU number format. */
+export function OmniVoiceSection() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const { data } = useQuery({
+    queryKey: OMNIVOICE_KEY,
+    queryFn: () => apiClient.getOmniVoiceSettings(),
+  });
+  const mutation = useMutation({
+    mutationFn: (patch: Partial<OmniVoiceSettings>) => apiClient.updateOmniVoiceSettings(patch),
+    onSuccess: (next) => queryClient.setQueryData(OMNIVOICE_KEY, next),
+  });
+
+  return (
+    <SettingSection
+      title={t('settings.omnivoice.title')}
+      description={t('settings.omnivoice.description')}
+    >
+      <SettingRow
+        title={t('settings.omnivoice.mode.title')}
+        description={t('settings.omnivoice.mode.description')}
+        action={
+          <Select
+            value={data?.mode ?? 'quality'}
+            onValueChange={(v) => mutation.mutate({ mode: v as OmniVoiceSettings['mode'] })}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {OMNIVOICE_MODES.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {t(`settings.omnivoice.mode.${m}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
       />
     </SettingSection>
   );

@@ -56,6 +56,7 @@ import type {
   CloudLoginStartResponse,
   AudioFinishSettings,
   CloudStatus,
+  OmniVoiceSettings,
   QualityCheckSettings,
   QwenCppSettings,
   TextPrepSettings,
@@ -611,6 +612,18 @@ class ApiClient {
 
   async updateQwenCppSettings(patch: Partial<QwenCppSettings>): Promise<QwenCppSettings> {
     return this.request<QwenCppSettings>('/settings/qwen-cpp', {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    });
+  }
+
+  // OmniVoice speed mode (diffusion steps, CPU precision).
+  async getOmniVoiceSettings(): Promise<OmniVoiceSettings> {
+    return this.request<OmniVoiceSettings>('/settings/omnivoice');
+  }
+
+  async updateOmniVoiceSettings(patch: Partial<OmniVoiceSettings>): Promise<OmniVoiceSettings> {
+    return this.request<OmniVoiceSettings>('/settings/omnivoice', {
       method: 'PUT',
       body: JSON.stringify(patch),
     });

@@ -126,3 +126,23 @@ async def update_qwen_cpp_settings(patch: models.QwenCppSettingsUpdate):
     if any(before[k] != after[k] for k in ("talker_precision", "codec_precision", "device")):
         get_tts_backend_for_engine("qwen_cpp").unload_model()
     return await get_qwen_cpp_settings()
+
+
+@router.get("/omnivoice", response_model=models.OmniVoiceSettings)
+async def get_omnivoice_settings():
+    from ..backends import omnivoice_backend
+
+    return models.OmniVoiceSettings(**omnivoice_backend.load_settings())
+
+
+@router.put("/omnivoice", response_model=models.OmniVoiceSettings)
+async def update_omnivoice_settings(patch: models.OmniVoiceSettingsUpdate):
+    """The step count applies to the next generation; a CPU precision change reloads the model."""
+    from ..backends import get_tts_backend_for_engine
+    from ..backends import omnivoice_backend
+
+    before = omnivoice_backend.load_settings()
+    after = omnivoice_backend.save_settings(patch.model_dump(exclude_unset=True))
+    if before["mode"] != after["mode"]:
+        get_tts_backend_for_engine("omnivoice").unload_model()
+    return await get_omnivoice_settings()

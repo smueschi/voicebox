@@ -26,6 +26,7 @@ import asyncio
 import atexit
 import base64
 import hashlib
+import http.client
 import io
 import json
 import logging
@@ -145,8 +146,111 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
+_kill_on_close_job = None
+
+
+def _bind_to_this_process(proc: subprocess.Popen) -> None:
+    """Windows: put the child in a job that dies with this process.
+
+    The app ends the server with TerminateProcess, so atexit never runs and a
+    tts-server would otherwise stay behind holding the model in GPU memory.
+    """
+    global _kill_on_close_job
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+
+        class IO_COUNTERS(ctypes.Structure):
+            _fields_ = [(n, ctypes.c_ulonglong) for n in (
+                "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+                "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
+
+        class BASIC_LIMIT(ctypes.Structure):
+            _fields_ = [
+                ("PerProcessUserTimeLimit", ctypes.c_longlong),
+                ("PerJobUserTimeLimit", ctypes.c_longlong),
+                ("LimitFlags", wintypes.DWORD),
+                ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t),
+                ("ActiveProcessLimit", wintypes.DWORD),
+                ("Affinity", ctypes.c_size_t),
+                ("PriorityClass", wintypes.DWORD),
+                ("SchedulingClass", wintypes.DWORD),
+            ]
+
+        class EXTENDED_LIMIT(ctypes.Structure):
+            _fields_ = [
+                ("BasicLimitInformation", BASIC_LIMIT),
+                ("IoInfo", IO_COUNTERS),
+                ("ProcessMemoryLimit", ctypes.c_size_t),
+                ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                ("PeakJobMemoryUsed", ctypes.c_size_t),
+            ]
+
+        if _kill_on_close_job is None:
+            job = kernel32.CreateJobObjectW(None, None)
+            if not job:
+                raise ctypes.WinError(ctypes.get_last_error())
+            info = EXTENDED_LIMIT()
+            info.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            if not kernel32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)):
+                raise ctypes.WinError(ctypes.get_last_error())
+            _kill_on_close_job = job
+
+        handle = kernel32.OpenProcess(0x0001 | 0x0100, False, proc.pid)  # PROCESS_TERMINATE | SET_QUOTA
+        if not handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+        try:
+            if not kernel32.AssignProcessToJobObject(_kill_on_close_job, handle):
+                raise ctypes.WinError(ctypes.get_last_error())
+        finally:
+            kernel32.CloseHandle(handle)
+    except OSError as e:
+        logger.warning("Could not tie tts-server to the server process: %s", e)
+
+
+def _pid_file(exe: Path) -> Path:
+    return exe.parent / "tts-server.pid"
+
+
+def _kill_leftover(exe: Path) -> None:
+    """Stop a tts-server that an earlier, killed server run left behind."""
+    pid_file = _pid_file(exe)
+    try:
+        pid = int(pid_file.read_text().strip())
+    except (OSError, ValueError):
+        return
+    try:
+        if sys.platform == "win32":
+            out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                                 capture_output=True, text=True, timeout=10,
+                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+            if exe.name.lower() in out.lower():
+                subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, timeout=10,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                logger.info("Stopped leftover tts-server (pid %d)", pid)
+        else:
+            cmdline = Path(f"/proc/{pid}/cmdline")
+            if cmdline.exists() and exe.name in cmdline.read_text(errors="replace"):
+                os.kill(pid, 9)
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.warning("Could not stop leftover tts-server %d: %s", pid, e)
+    pid_file.unlink(missing_ok=True)
+
+
 class QwenCppTTSBackend:
     """Qwen3-TTS Base (voice cloning) served by qwentts.cpp."""
+
+    # The codec decodes a whole chunk in one pass on the GPU; 800-char chunks
+    # (~45 s of audio) ran out of memory on a Radeon 880M with shared VRAM.
+    max_chunk_chars = 400
 
     def __init__(self):
         self.proc: Optional[subprocess.Popen] = None
@@ -156,7 +260,8 @@ class QwenCppTTSBackend:
         self.device_name: Optional[str] = None
         self._loaded_files: Optional[tuple[str, str]] = None
         self._voices: set[str] = set()
-        self._lock = threading.Lock()
+        # Reentrant: a generation that finds the server dead reloads it while holding the lock.
+        self._lock = threading.RLock()
         atexit.register(self.unload_model)
 
     # ---- model management -------------------------------------------------
@@ -196,6 +301,7 @@ class QwenCppTTSBackend:
                 talker = hf_hub_download(QWENTTS_HF_REPO, files[0])
                 codec = hf_hub_download(QWENTTS_HF_REPO, files[1])
 
+            _kill_leftover(exe)
             settings = load_settings()
             device = settings["device"] if settings["device"] != "auto" else detect_device()
             for attempt_device in dict.fromkeys([device, "CPU"]):
@@ -209,6 +315,11 @@ class QwenCppTTSBackend:
                     cmd, stdout=log, stderr=subprocess.STDOUT, cwd=str(exe.parent),
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
+                _bind_to_this_process(self.proc)
+                try:
+                    _pid_file(exe).write_text(str(self.proc.pid))
+                except OSError:
+                    pass
                 self.url = f"http://127.0.0.1:{port}"
                 if self._wait_ready(timeout=300):
                     break
@@ -295,16 +406,28 @@ class QwenCppTTSBackend:
     ) -> Tuple[np.ndarray, int]:
         await self.load_model(self.model_size or "1.7B")
 
+        def _synthesise() -> bytes:
+            self._ensure_voice(voice_prompt)
+            settings = load_settings()
+            payload = {"input": text, "voice": voice_prompt["voice"],
+                       "language": LANGUAGE_CODE_TO_NAME.get(language, "auto"), "response_format": "wav"}
+            payload.update({k: settings[k] for k in SAMPLING_KEYS})
+            if seed is not None:
+                payload["seed"] = int(seed)
+            return self._post("/v1/audio/speech", payload)
+
         def _generate_sync():
             with self._lock:
-                self._ensure_voice(voice_prompt)
-                settings = load_settings()
-                payload = {"input": text, "voice": voice_prompt["voice"],
-                           "language": LANGUAGE_CODE_TO_NAME.get(language, "auto"), "response_format": "wav"}
-                payload.update({k: settings[k] for k in SAMPLING_KEYS})
-                if seed is not None:
-                    payload["seed"] = int(seed)
-                raw = self._post("/v1/audio/speech", payload)
+                try:
+                    raw = _synthesise()
+                except (ConnectionError, urllib.error.URLError, http.client.HTTPException) as e:
+                    # The tts-server crashed (e.g. out of GPU memory) or was killed:
+                    # start it again and try this chunk once more.
+                    logger.warning("qwentts.cpp connection lost (%s); restarting tts-server", e)
+                    size = self.model_size or "1.7B"
+                    self.unload_model()
+                    self._load_model_sync(size, model_files(size))
+                    raw = _synthesise()
             with wave.open(io.BytesIO(raw)) as w:
                 sr, width, channels = w.getframerate(), w.getsampwidth(), w.getnchannels()
                 frames = w.readframes(w.getnframes())

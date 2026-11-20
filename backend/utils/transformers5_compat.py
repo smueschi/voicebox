@@ -12,8 +12,12 @@ transformers 5.3+ and trips over two gaps:
    ``backend/vendor/higgs_audio_v2_tokenizer`` and graft it on.
 2. Its ``tokenizer_config.json`` writes ``extra_special_tokens`` as a list,
    the 5.x form. 4.57.6 expects a mapping and raises ``AttributeError``.
+3. Its Qwen3 backbone config stores RoPE as ``rope_parameters`` (5.x). 4.57.6
+   ignores that key and silently uses ``rope_theta=10000`` instead of the
+   trained 1e6. Short prompts survive it; voice cloning, which prepends
+   hundreds of reference tokens, turns into gibberish in every language.
 
-Both fixes are additive: they add a name that was absent, and accept an input
+All fixes are additive: they add a name that was absent, and accept an input
 shape that previously crashed. Neither changes behaviour for the other engines.
 
 Same spirit as ``backend/utils/dac_shim.py``, which fakes ``dac.nn.layers`` so
@@ -42,6 +46,7 @@ def install() -> None:
 
     install_higgs_audio_tokenizer()
     patch_extra_special_tokens()
+    patch_qwen3_rope_parameters()
     _installed = True
 
 
@@ -164,6 +169,42 @@ def patch_extra_special_tokens() -> bool:
     PreTrainedTokenizerBase._set_model_specific_special_tokens = patched
 
     logger.debug("installed extra_special_tokens list-form wrapper")
+    return True
+
+
+# ---------------------------------------------------------------------------
+# 3. rope_parameters on Qwen3Config
+# ---------------------------------------------------------------------------
+
+
+def patch_qwen3_rope_parameters() -> bool:
+    """Translate the 5.x ``rope_parameters`` dict into 4.57's ``rope_theta``/``rope_scaling``.
+
+    Only acts when a config carries ``rope_parameters`` and no explicit
+    ``rope_theta``, so 4.x-format configs (every other engine) are untouched.
+
+    Returns:
+        True if the wrapper was installed, False if not needed or already there.
+    """
+    from transformers.models.qwen3.configuration_qwen3 import Qwen3Config
+
+    original = Qwen3Config.__init__
+    if getattr(original, "_voicebox_patched", False):
+        return False
+    if "rope_parameters" in getattr(getattr(original, "__code__", None), "co_varnames", ()):
+        return False  # running transformers understands rope_parameters natively
+
+    def patched(self, *args, **kwargs):
+        rope = kwargs.get("rope_parameters")
+        if isinstance(rope, dict) and "rope_theta" not in kwargs:
+            kwargs["rope_theta"] = rope.get("rope_theta", 10000.0)
+            if rope.get("rope_type", "default") != "default" and kwargs.get("rope_scaling") is None:
+                kwargs["rope_scaling"] = dict(rope)
+        original(self, *args, **kwargs)
+
+    patched._voicebox_patched = True
+    Qwen3Config.__init__ = patched
+    logger.debug("installed rope_parameters -> rope_theta wrapper for Qwen3Config")
     return True
 
 
